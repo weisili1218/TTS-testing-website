@@ -1,0 +1,38 @@
+services:
+  arena:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: tts-arena:latest
+    container_name: tts-arena
+    init: true
+    ports:
+      - "8080:8080"
+    environment:
+      # 四包 gateway 的主機位址。engines.json 裡寫的是 http://${TTS_HOST}:800X，
+      # 所以只要改這一個值。四包在宿主機上就用 host.docker.internal，在別台就填 IP。
+      TTS_HOST: "host.docker.internal"
+      # 各 gateway 若設了 API_KEY 就填這裡
+      # TTS_API_KEY: ""
+
+      # 客觀評分用的 Whisper ASR，沒設就沿用 F5_BASE_URL
+      ASR_BASE_URL: "http://host.docker.internal:8000"
+
+      # 舊的 F5-TTS（留空 = 停用，不會出現在 UI 上）
+      F5_BASE_URL: "http://host.docker.internal:8000"
+      # F5_REF_AUDIO: "/data/voices/dami.wav"
+
+      # 需要 API key 保護平台本身時打開
+      # API_KEY: "change-me"
+    extra_hosts:
+      # Linux 上讓 host.docker.internal 指得到宿主機
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # 音色庫、評測音檔、評測紀錄、批次報表
+      - ./storage:/workspace/storage
+      # 引擎清單掛進去，改完按 UI 上的「重載 engines.json」就生效，不用重建映像
+      - ./engines.json:/workspace/engines.json:ro
+    deploy:
+      resources:
+        limits:
+          memory: 2g

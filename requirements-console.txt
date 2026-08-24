@@ -1,0 +1,8 @@
+# 評測平台本身需要的套件（所有模型都在遠端，不含 torch）
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+python-multipart==0.0.9
+python-dotenv==1.0.1
+soundfile==0.12.1
+numpy<2
+httpx==0.27.0

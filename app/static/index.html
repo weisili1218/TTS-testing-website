@@ -1,0 +1,1442 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TTS 評測平台</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel-2:#1c2230; --panel-3:#222a37; --line:#2a323d;
+    --txt:#e6edf3; --muted:#8b98a8; --accent:#4c9aff; --accent-2:#37d5a8;
+    --danger:#ff6b6b; --warn:#f0b429; --gold:#ffd166; --purple:#b07cff;
+    --radius:14px;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#f4f6f9; --panel:#fff; --panel-2:#f0f3f7; --panel-3:#e7ecf3; --line:#dde3ec;
+           --txt:#16202c; --muted:#5c6a7a; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0; background:var(--bg); color:var(--txt);
+    font:15px/1.65 "Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,-apple-system,sans-serif;}
+
+  header{display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    padding:12px 22px; border-bottom:1px solid var(--line); background:var(--panel);
+    position:sticky; top:0; z-index:30;}
+  header h1{font-size:16px; margin:0; letter-spacing:.4px; white-space:nowrap}
+  header h1 small{color:var(--muted); font-weight:400; margin-left:8px; font-size:12px}
+  .spacer{flex:1}
+
+  nav{display:flex; gap:4px; background:var(--panel-2); padding:3px; border-radius:10px; flex-wrap:wrap}
+  nav button{border:none; background:transparent; color:var(--muted); padding:6px 14px;
+    border-radius:8px; font:inherit; font-size:13.5px; cursor:pointer}
+  nav button.on{background:var(--panel); color:var(--txt); font-weight:600;
+    box-shadow:0 1px 4px rgba(0,0,0,.2)}
+  nav button .pip{display:inline-block; min-width:17px; padding:0 4px; margin-left:5px;
+    background:var(--accent); color:#fff; border-radius:99px; font-size:10.5px; line-height:16px;
+    text-align:center; font-weight:700; vertical-align:1px}
+
+  .badge{display:inline-flex; align-items:center; gap:6px; padding:4px 10px;
+    border-radius:999px; font-size:12px; background:var(--panel-2);
+    border:1px solid var(--line); color:var(--muted); white-space:nowrap}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--muted); flex:none}
+  .dot.ok{background:var(--accent-2)} .dot.load{background:var(--warn)} .dot.err{background:var(--danger)}
+
+  main{max-width:1240px; margin:0 auto; padding:20px 22px 70px}
+  .page{display:none} .page.on{display:block}
+
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:18px; margin-bottom:16px}
+  .card h2{margin:0 0 3px; font-size:15px; display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+  .card p.hint{margin:0 0 14px; color:var(--muted); font-size:12.5px}
+  .card h3{margin:20px 0 8px; font-size:13.5px; color:var(--muted); font-weight:600;
+    text-transform:none; letter-spacing:.3px}
+
+  label{display:block; font-size:12.5px; color:var(--muted); margin:12px 0 5px}
+  input[type=text], input[type=number], textarea, select{
+    width:100%; padding:9px 11px; background:var(--panel-2); color:var(--txt);
+    border:1px solid var(--line); border-radius:9px; font:inherit; outline:none;}
+  textarea{resize:vertical; line-height:1.85}
+  input:focus, textarea:focus, select:focus{border-color:var(--accent)}
+  input[type=file]{width:100%; font-size:13px; color:var(--muted)}
+
+  button{padding:9px 15px; border-radius:9px; border:1px solid var(--line);
+    background:var(--panel-2); color:var(--txt); font:inherit; cursor:pointer}
+  button:hover:not(:disabled){border-color:var(--accent)}
+  button:disabled{opacity:.42; cursor:not-allowed}
+  button.primary{background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600}
+  button.small{padding:5px 11px; font-size:12.5px}
+  button.danger:hover{border-color:var(--danger); color:var(--danger)}
+  button.ghost{background:transparent}
+
+  .row{display:flex; gap:9px; flex-wrap:wrap; align-items:center}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:16px}
+  .grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:12px}
+  @media(max-width:820px){ .grid2,.grid3{grid-template-columns:1fr} }
+  .check{display:inline-flex; align-items:center; gap:7px; font-size:13px; color:var(--txt); margin:0}
+  .check input{width:auto; margin:0}
+
+  .chips{display:flex; gap:7px; flex-wrap:wrap; margin-bottom:10px}
+  .chip{padding:5px 12px; border-radius:999px; border:1px solid var(--line);
+    background:var(--panel-2); font-size:12.5px; cursor:pointer; color:var(--muted)}
+  .chip:hover{border-color:var(--accent); color:var(--txt)}
+  .chip.on{border-color:var(--accent); color:var(--txt); background:var(--panel-3)}
+
+  .banner{border-radius:11px; padding:11px 14px; font-size:12.8px; margin-bottom:16px;
+    border:1px solid var(--line); background:var(--panel-2); color:var(--muted)}
+  .banner b{color:var(--txt)}
+  .banner.warn{border-left:3px solid var(--warn)}
+  .banner.bad{border-left:3px solid var(--danger)}
+  .banner.good{border-left:3px solid var(--accent-2)}
+  .banner ul{margin:7px 0 0; padding-left:19px} .banner li{margin:3px 0}
+
+  progress{width:100%; height:7px; border-radius:99px; appearance:none; margin-top:12px}
+  progress::-webkit-progress-bar{background:var(--panel-2); border-radius:99px}
+  progress::-webkit-progress-value{background:var(--accent); border-radius:99px}
+  .status-line{font-size:12.5px; color:var(--muted); min-height:1.4em}
+  .err{color:var(--danger); font-size:12.5px; white-space:pre-wrap; margin-top:8px}
+
+  /* ---------- 引擎選擇 ---------- */
+  .engine-picks{display:grid; grid-template-columns:repeat(auto-fill,minmax(196px,1fr)); gap:9px}
+  .epick{border:1px solid var(--line); border-radius:11px; padding:10px 12px;
+    background:var(--panel-2); cursor:pointer; position:relative}
+  .epick.on{border-color:var(--accent); background:var(--panel-3)}
+  .epick.off{opacity:.45; cursor:not-allowed}
+  .epick .nm{font-size:13.5px; font-weight:600; display:flex; align-items:center; gap:7px}
+  .epick .mt{font-size:11.5px; color:var(--muted); margin-top:3px; line-height:1.5}
+  .tag{display:inline-block; padding:1px 7px; border-radius:99px; font-size:10.5px;
+    border:1px solid var(--line); color:var(--muted); background:var(--panel)}
+  .tag.clone{border-color:var(--accent-2); color:var(--accent-2)}
+  .tag.preset{border-color:var(--purple); color:var(--purple)}
+  .tag.warn{border-color:var(--warn); color:var(--warn)}
+
+  /* ---------- 盲測 ---------- */
+  .slots{display:grid; gap:13px}
+  .slots.n2{grid-template-columns:1fr 1fr}
+  .slots.n3{grid-template-columns:repeat(3,1fr)}
+  .slots.n4{grid-template-columns:repeat(2,1fr)}
+  @media(max-width:760px){ .slots{grid-template-columns:1fr !important} }
+  .side{border:1px solid var(--line); border-radius:12px; padding:15px; background:var(--panel-2)}
+  .side.win{border-color:var(--gold); box-shadow:0 0 0 1px var(--gold) inset}
+  .side.picked{border-color:var(--accent)}
+  .side .slot{font-size:24px; font-weight:700; letter-spacing:2px; margin-bottom:2px;
+    display:flex; align-items:center; gap:10px}
+  .side .rank-badge{font-size:12px; font-weight:700; background:var(--accent); color:#fff;
+    border-radius:99px; padding:2px 9px; letter-spacing:0}
+  .side .who{font-size:12.5px; color:var(--muted); margin-bottom:8px; min-height:1.3em}
+  .side audio{width:100%; margin:6px 0}
+
+  /* ---------- 表格 ---------- */
+  .tw{overflow-x:auto; margin:0 -4px}
+  table{width:100%; border-collapse:collapse; font-size:12.8px; min-width:520px}
+  th,td{padding:8px 10px; text-align:right; border-bottom:1px solid var(--line); white-space:nowrap}
+  th:first-child,td:first-child{text-align:left; white-space:normal}
+  th{color:var(--muted); font-weight:600; font-size:11.5px; position:sticky; top:0;
+    background:var(--panel); z-index:1}
+  tr:last-child td{border-bottom:none}
+  td.best{color:var(--accent-2); font-weight:700}
+  td.worst{color:var(--danger)}
+  .num{font-variant-numeric:tabular-nums}
+  .sub{font-size:11px; color:var(--muted); font-weight:400}
+
+  /* ---------- Elo 條 ---------- */
+  .elo-row{display:grid; grid-template-columns:minmax(120px,150px) 1fr 96px; gap:12px;
+    align-items:center; margin-bottom:11px}
+  .elo-track{position:relative; height:24px; background:var(--panel-2); border-radius:7px;
+    border:1px solid var(--line)}
+  .elo-ci{position:absolute; top:5px; bottom:5px; background:var(--accent); opacity:.22;
+    border-radius:4px}
+  .elo-pt{position:absolute; top:2px; bottom:2px; width:3px; background:var(--accent);
+    border-radius:2px}
+  .elo-val{text-align:right; font-variant-numeric:tabular-nums; font-weight:700; font-size:13px}
+  .elo-val small{display:block; font-weight:400; color:var(--muted); font-size:10.5px}
+
+  /* ---------- 對戰矩陣 ---------- */
+  .matrix td.cell{text-align:center; font-variant-numeric:tabular-nums}
+  .matrix td.self{background:var(--panel-2); color:var(--muted)}
+  .matrix .mini{font-size:10px; color:var(--muted); display:block}
+
+  .kv{display:grid; grid-template-columns:auto 1fr; gap:4px 14px; font-size:12.5px}
+  .kv dt{color:var(--muted)} .kv dd{margin:0; font-variant-numeric:tabular-nums}
+
+  .warnlist{margin:8px 0 0; padding-left:18px; font-size:11.8px; color:var(--warn)}
+  .warnlist li{margin:2px 0}
+
+  .list-item{border:1px solid var(--line); border-radius:11px; padding:12px 14px;
+    margin-bottom:9px; background:var(--panel-2)}
+  .list-item .top{display:flex; gap:10px; align-items:baseline; flex-wrap:wrap}
+  .list-item .txt{font-size:13px; margin:5px 0; line-height:1.6}
+  .muted{color:var(--muted)}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px}
+  .empty{color:var(--muted); font-size:13px; text-align:center; padding:26px 10px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>TTS 評測平台 <small id="hdrSub">速度 · 吐字 · 音色</small></h1>
+  <nav id="nav">
+    <button data-p="arena" class="on">競技場</button>
+    <button data-p="board">排行榜</button>
+    <button data-p="batch">批次</button>
+    <button data-p="history">紀錄<span class="pip" id="pipPending" hidden>0</span></button>
+    <button data-p="voices">音色</button>
+    <button data-p="engines">引擎</button>
+  </nav>
+  <div class="spacer"></div>
+  <span class="badge" id="badgeEngines"><span class="dot"></span><span>引擎</span></span>
+  <span class="badge" id="badgeAsr"><span class="dot"></span><span>ASR</span></span>
+  <button class="small ghost" id="btnRefresh">重新檢查</button>
+</header>
+
+<main>
+
+<!-- ═════════════════════════════════ 競技場 ═════════════════════════════════ -->
+<section class="page on" id="p-arena">
+  <div class="banner" id="cmpBanner">載入中…</div>
+
+  <div class="card">
+    <h2>跑一次評測</h2>
+    <p class="hint">同一段文字、同一種切段規則、依序執行 —— 速度數字才可以互相比較。</p>
+
+    <label>參賽引擎</label>
+    <div class="engine-picks" id="enginePicks"></div>
+
+    <div class="grid3" style="margin-top:14px">
+      <div>
+        <label>評測模式</label>
+        <select id="selMode">
+          <option value="duel">對決 — 跑全部，盲測其中兩個</option>
+          <option value="ranking">排名 — 全部盲測，排出名次</option>
+          <option value="open">公開 — 不盲測，直接看數據</option>
+        </select>
+      </div>
+      <div>
+        <label>音色（克隆引擎用）</label>
+        <select id="selVoice"></select>
+      </div>
+      <div>
+        <label>重複次數 <span class="sub">看速度穩不穩</span></label>
+        <select id="selRepeats">
+          <option value="1">1 次</option>
+          <option value="3">3 次（看變異）</option>
+          <option value="5">5 次</option>
+        </select>
+      </div>
+    </div>
+
+    <label style="margin-top:14px">測試句</label>
+    <div class="chips" id="presetChips"></div>
+    <textarea id="txtInput" rows="4" placeholder="貼一段要合成的文字，或點上面的內建測試句"></textarea>
+
+    <div class="row" style="margin-top:12px">
+      <label class="check"><input type="checkbox" id="chkScore" checked /> 算 CER（客觀吐字）</label>
+      <label class="check"><input type="checkbox" id="chkNorm" checked /> 音量正規化</label>
+      <span class="muted" style="font-size:12.5px">語速</span>
+      <input type="number" id="numSpeed" value="1.0" step="0.05" min="0.5" max="2.0" style="width:78px" />
+      <div class="spacer"></div>
+      <button class="small" id="btnWarm">暖機</button>
+      <button class="primary" id="btnRun">開始評測</button>
+    </div>
+
+    <progress id="runProg" value="0" max="1" hidden></progress>
+    <div class="status-line" id="runStatus"></div>
+    <div class="err" id="runErr"></div>
+  </div>
+
+  <div class="card" id="trialCard" hidden>
+    <h2 id="trialTitle">盲測</h2>
+    <p class="hint" id="trialHint"></p>
+    <div class="slots" id="slotBox"></div>
+
+    <div class="row" id="voteBox" style="margin-top:14px"></div>
+    <label style="margin-top:10px">備註（選填）</label>
+    <input type="text" id="voteNote" placeholder="例如：B 的破音字唸錯、A 的語氣比較自然" />
+
+    <div id="revealBox"></div>
+  </div>
+</section>
+
+<!-- ═════════════════════════════════ 排行榜 ═════════════════════════════════ -->
+<section class="page" id="p-board">
+  <div class="card">
+    <h2>排名 <span class="sub" id="eloMeta"></span></h2>
+    <p class="hint">主排名用 Elo，不用勝率 —— 勝率會被「碰到誰」左右，Elo 會把對手強弱算進去。
+      淺色區塊是 90% 信賴區間，<b>區間重疊就代表還分不出高下</b>。</p>
+    <div id="eloBox"><div class="empty">還沒有投票紀錄</div></div>
+    <div class="row" style="margin-top:14px">
+      <button class="small" id="btnBaseline">量 ASR 誤差底線</button>
+      <button class="small" id="btnCsv">匯出 CSV</button>
+      <div class="spacer"></div>
+      <button class="small" id="btnBoardRefresh">重新整理</button>
+    </div>
+    <div class="status-line" id="boardStatus"></div>
+  </div>
+
+  <div class="card" id="caveatCard" hidden>
+    <h2>判讀提醒</h2>
+    <p class="hint">下面這幾件事會讓結論站不住腳，先處理再下判斷。</p>
+    <div class="banner warn"><ul id="caveatList"></ul></div>
+  </div>
+
+  <div class="card">
+    <h2>速度與吐字</h2>
+    <p class="hint">p95 是「最糟的那 5% 有多糟」；變異係數（CV）越小代表越穩定。
+      RTF &lt; 1 代表比即時快。</p>
+    <div class="tw"><table id="tblSpeed"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>分類戰報</h2>
+    <p class="hint">「哪個模型最好」通常沒有單一答案。數字唸得準的可能破音字很爛 ——
+      這張表才是換模型時真正在看的東西。綠色 = 該類 CER 最低。</p>
+    <div class="tw"><table id="tblCat"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>對戰矩陣</h2>
+    <p class="hint">每一格是「列 vs 欄」的勝率與場數。空格代表這兩顆還沒交手過，
+      平台會優先配對場數最少的組合把它補滿。</p>
+    <div class="tw"><table id="tblMatrix" class="matrix"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>音訊客觀指標</h2>
+    <p class="hint">不需要 ASR 也不需要人耳的純訊號指標。<b>頻寬比</b>是實際內容頻寬 ÷ 宣稱取樣率的
+      奈奎斯特頻率 —— 明顯小於 1 代表是低取樣率模型升採樣上來的。</p>
+    <div class="tw"><table id="tblAudio"></table></div>
+  </div>
+</section>
+
+<!-- ═════════════════════════════════ 批次 ═════════════════════════════════ -->
+<section class="page" id="p-batch">
+  <div class="card">
+    <h2>批次跑測</h2>
+    <p class="hint">整批句子 × 全部引擎一次跑完，產出固定的報表。整批依序跑（不並行），
+      所以會花不少時間 —— 十句 × 四個引擎大約要好幾分鐘。</p>
+
+    <label>參賽引擎</label>
+    <div class="engine-picks" id="batchPicks"></div>
+
+    <label style="margin-top:14px">要跑哪些句子</label>
+    <div class="chips" id="batchCats"></div>
+    <p class="hint" style="margin-top:-4px">不選 = 跑完整題庫。</p>
+
+    <div class="grid3">
+      <div>
+        <label>模式</label>
+        <select id="batchMode">
+          <option value="open">公開 — 只收客觀數據（最快）</option>
+          <option value="duel">對決 — 留成待投票的盲測</option>
+          <option value="ranking">排名 — 留成待排名的盲測</option>
+        </select>
+      </div>
+      <div>
+        <label>音色</label>
+        <select id="batchVoice"></select>
+      </div>
+      <div>
+        <label>每句重複</label>
+        <select id="batchRepeats">
+          <option value="1">1 次</option>
+          <option value="3">3 次</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:13px">
+      <label class="check"><input type="checkbox" id="batchScore" checked /> 算 CER</label>
+      <div class="spacer"></div>
+      <button class="primary" id="btnBatch">開始批次</button>
+    </div>
+    <progress id="batchProg" value="0" max="1" hidden></progress>
+    <div class="status-line" id="batchStatus"></div>
+    <div class="err" id="batchErr"></div>
+  </div>
+
+  <div class="card">
+    <h2>報表</h2>
+    <div id="batchList"><div class="empty">還沒有批次報表</div></div>
+  </div>
+
+  <div class="card" id="batchReportCard" hidden>
+    <h2 id="batchReportTitle">報表明細</h2>
+    <div id="batchReport"></div>
+  </div>
+</section>
+
+<!-- ═════════════════════════════════ 紀錄 ═════════════════════════════════ -->
+<section class="page" id="p-history">
+  <div class="card" id="pendingCard" hidden>
+    <h2>待投票 <span class="sub" id="pendingCount"></span></h2>
+    <p class="hint">批次跑出來的盲測還沒投票。點「去投票」會把它載到競技場。</p>
+    <div id="pendingList"></div>
+  </div>
+
+  <div class="card">
+    <h2>評測紀錄</h2>
+    <div class="row" style="margin-bottom:12px">
+      <button class="small" id="btnHistRefresh">重新整理</button>
+      <div class="spacer"></div>
+      <button class="small danger" id="btnClearAll">清空全部紀錄</button>
+    </div>
+    <div id="histList"><div class="empty">還沒有評測紀錄</div></div>
+  </div>
+</section>
+
+<!-- ═════════════════════════════════ 音色 ═════════════════════════════════ -->
+<section class="page" id="p-voices">
+  <div class="card">
+    <h2>上傳參考音</h2>
+    <p class="hint">2–30 秒的乾淨單人語音效果最好。逐字稿要跟參考音<b>一字不差</b> ——
+      克隆模型少了逐字稿會退到相似度較差的路徑。</p>
+    <div class="grid2">
+      <div>
+        <label>音檔</label>
+        <input type="file" id="vFile" accept="audio/*" />
+        <label>名稱</label>
+        <input type="text" id="vName" placeholder="例如：主播大美" />
+      </div>
+      <div>
+        <label>逐字稿</label>
+        <textarea id="vText" rows="4" placeholder="參考音裡實際唸的每一個字"></textarea>
+        <label class="check" style="margin-top:9px">
+          <input type="checkbox" id="vAuto" checked /> 沒填的話用 Whisper 自動辨識
+        </label>
+      </div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <div class="spacer"></div>
+      <button class="primary" id="btnUpload">上傳並推送到各引擎</button>
+    </div>
+    <div class="status-line" id="vStatus"></div>
+    <div class="err" id="vErr"></div>
+  </div>
+
+  <div class="card">
+    <h2>音色庫</h2>
+    <p class="hint">四包 gateway 的音色庫<b>彼此不共用</b>，同一段參考音要推到每一顆引擎上，
+      克隆比較才有意義。下面每個音色會列出它在各引擎的推送狀態。</p>
+    <div class="row" style="margin-bottom:12px">
+      <button class="small" id="btnPushAll">全部重新推送</button>
+      <div class="spacer"></div>
+      <button class="small" id="btnVoiceRefresh">重新整理</button>
+    </div>
+    <div id="voiceList"><div class="empty">音色庫是空的</div></div>
+  </div>
+</section>
+
+<!-- ═════════════════════════════════ 引擎 ═════════════════════════════════ -->
+<section class="page" id="p-engines">
+  <div class="card">
+    <h2>引擎狀態</h2>
+    <p class="hint">能力（modes / 內建 speaker / 取樣率）是從各 gateway 的
+      <span class="mono">GET /v1/models</span> 探測來的，不是寫死的。
+      要加第五顆模型，改 <span class="mono">engines.json</span> 再按「重載設定」就好。</p>
+    <div class="row" style="margin-bottom:12px">
+      <button class="small" id="btnWarmAll">全部暖機</button>
+      <button class="small" id="btnDeep">深度檢查（實際合成一句）</button>
+      <div class="spacer"></div>
+      <button class="small" id="btnReload">重載 engines.json</button>
+    </div>
+    <div class="status-line" id="engStatus"></div>
+    <div id="engineList"></div>
+  </div>
+</section>
+
+</main>
+
+<script>
+"use strict";
+/* ════════════════════════════════════════════════════════════════════════
+   共用工具
+   ════════════════════════════════════════════════════════════════════════ */
+const $  = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+const esc = s => String(s == null ? "" : s)
+  .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+
+async function api(path, opts) {
+  const res = await fetch(path, Object.assign({ headers: { "Content-Type": "application/json" } }, opts));
+  const ct = res.headers.get("content-type") || "";
+  const body = ct.includes("json") ? await res.json() : await res.text();
+  if (!res.ok) throw new Error((body && body.detail) || (typeof body === "string" ? body : res.statusText));
+  return body;
+}
+const post = (p, b) => api(p, { method: "POST", body: JSON.stringify(b || {}) });
+const del  = p => api(p, { method: "DELETE" });
+
+/** 輪詢一個非同步任務直到完成。 */
+async function poll(jobId, onProgress) {
+  for (;;) {
+    const job = await api(`/api/jobs/${jobId}`);
+    if (onProgress) onProgress(job);
+    if (job.status === "done") return job.result;
+    if (job.status === "error") throw new Error(job.error || "任務失敗");
+    await new Promise(r => setTimeout(r, 600));
+  }
+}
+
+const n1 = v => v == null ? "—" : (+v).toFixed(1);
+const n2 = v => v == null ? "—" : (+v).toFixed(2);
+const n3 = v => v == null ? "—" : (+v).toFixed(3);
+const pct = v => v == null ? "—" : (v * 100).toFixed(1) + "%";
+const secs = v => v == null ? "—" : (+v).toFixed(2) + " 秒";
+const khz = v => v == null ? "—" : (v / 1000).toFixed(1) + " kHz";
+const when = s => { try { return new Date(s).toLocaleString("zh-TW", { hour12:false }); } catch { return s; } };
+
+/** 一組數字裡挑最好／最差的 key，用來給表格上色。 */
+function extremes(rows, get, lowerBetter) {
+  const vals = rows.map(get).filter(v => v != null);
+  if (vals.length < 2) return {};
+  const best = lowerBetter ? Math.min(...vals) : Math.max(...vals);
+  const worst = lowerBetter ? Math.max(...vals) : Math.min(...vals);
+  return { best, worst };
+}
+function mark(v, ex) {
+  if (v == null || ex.best == null) return "";
+  if (Math.abs(v - ex.best) < 1e-9) return " class='best num'";
+  if (Math.abs(v - ex.worst) < 1e-9) return " class='worst num'";
+  return " class='num'";
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   全域狀態
+   ════════════════════════════════════════════════════════════════════════ */
+const S = {
+  status: null,
+  presets: [],
+  categories: [],
+  catLabels: {},
+  voices: [],
+  trial: null,        // 目前競技場上的評測
+  ranking: [],        // 排名模式：已選的格子順序
+  picked: new Set(),  // 競技場選的引擎
+  batchPicked: new Set(),
+  batchCats: new Set(),
+  busy: false,
+};
+
+/* ════════════════════════════════════════════════════════════════════════
+   分頁切換
+   ════════════════════════════════════════════════════════════════════════ */
+$$("#nav button").forEach(b => b.onclick = () => {
+  $$("#nav button").forEach(x => x.classList.toggle("on", x === b));
+  $$(".page").forEach(p => p.classList.toggle("on", p.id === "p-" + b.dataset.p));
+  const load = { board: loadBoard, batch: loadBatches, history: loadHistory,
+                 voices: loadVoices, engines: renderEngines }[b.dataset.p];
+  if (load) load();
+});
+
+/* ════════════════════════════════════════════════════════════════════════
+   狀態列 / 引擎能力
+   ════════════════════════════════════════════════════════════════════════ */
+async function loadStatus() {
+  try {
+    S.status = await api("/api/status");
+  } catch (e) {
+    $("#cmpBanner").className = "banner bad";
+    $("#cmpBanner").innerHTML = `連不到後端：${esc(e.message)}`;
+    return;
+  }
+  const st = S.status;
+
+  const active = st.engines.filter(e => e.enabled);
+  const ready = active.filter(e => e.loaded);
+  const eb = $("#badgeEngines");
+  eb.querySelector("span:last-child").textContent = `引擎 ${ready.length}/${active.length} 就緒`;
+  eb.querySelector(".dot").className = "dot " +
+    (active.length === 0 ? "err" : ready.length === active.length ? "ok" : "load");
+
+  const ab = $("#badgeAsr");
+  ab.querySelector("span:last-child").textContent = st.asr.enabled ? (st.asr.ok ? "ASR 正常" : "ASR 異常") : "ASR 停用";
+  ab.querySelector(".dot").className = "dot " + (!st.asr.enabled ? "" : st.asr.ok ? "ok" : "err");
+
+  // 可比性橫幅
+  const c = st.comparability;
+  const bits = [
+    `<b>速度</b> ✅ 可比`,
+    `<b>吐字 CER</b> ${c.intelligibility ? "✅ 可比" : "❌ ASR 未設定"}`,
+    `<b>音色</b> ${c.timbre ? "✅ 可比（" + c.timbre_group.length + " 顆引擎共用同一段參考音）" : "❌ 不可比"}`,
+  ];
+  const b = $("#cmpBanner");
+  b.className = "banner " + (c.timbre ? "good" : "warn");
+  b.innerHTML = bits.join(" &nbsp;·&nbsp; ") + `<br /><span class="muted">${esc(c.note)}</span>`;
+
+  renderEnginePicks();
+  await loadVoiceOptions();
+  await loadPendingCount();
+}
+
+/** 引擎多選卡片（競技場與批次共用）。 */
+function engineCardHtml(e, picked) {
+  const tags = [];
+  if (e.can_clone) tags.push(`<span class="tag clone">克隆</span>`);
+  if ((e.modes || []).includes("preset")) tags.push(`<span class="tag preset">內建音色</span>`);
+  if ((e.modes || []).includes("design")) tags.push(`<span class="tag">文字造音</span>`);
+  if (e.enabled && e.loaded === false) tags.push(`<span class="tag warn">未載入</span>`);
+  const meta = [];
+  if (e.sample_rate) meta.push(khz(e.sample_rate));
+  if (e.honors_speed === false) meta.push("語速本機處理");
+  if (e.caps_error) meta.push("探測失敗");
+  return `<div class="epick ${e.enabled ? (picked ? "on" : "") : "off"}" data-k="${esc(e.key)}">
+      <div class="nm">${esc(e.label)} ${tags.join("")}</div>
+      <div class="mt">${esc(meta.join(" · ") || (e.enabled ? "尚未探測到能力" : "未設定，停用中"))}</div>
+    </div>`;
+}
+
+function renderEnginePicks() {
+  const list = S.status.engines;
+  // 第一次進來預設全選所有啟用中的引擎
+  if (!S.picked.size) list.filter(e => e.enabled).forEach(e => S.picked.add(e.key));
+  if (!S.batchPicked.size) list.filter(e => e.enabled).forEach(e => S.batchPicked.add(e.key));
+
+  const wire = (box, set) => {
+    box.innerHTML = list.map(e => engineCardHtml(e, set.has(e.key))).join("");
+    $$(".epick", box).forEach(el => {
+      if (el.classList.contains("off")) return;
+      el.onclick = () => {
+        const k = el.dataset.k;
+        set.has(k) ? set.delete(k) : set.add(k);
+        el.classList.toggle("on", set.has(k));
+      };
+    });
+  };
+  wire($("#enginePicks"), S.picked);
+  wire($("#batchPicks"), S.batchPicked);
+}
+
+async function loadVoiceOptions() {
+  try {
+    const data = await api("/api/voices");
+    S.voices = data.voices || [];
+  } catch { S.voices = []; }
+  const opts = [`<option value="">（不指定 — 各引擎用自己的音色）</option>`]
+    .concat(S.voices.map(v => {
+      const synced = (v.synced_engines || []).length;
+      const flag = !v.transcription ? " ⚠ 缺逐字稿" : synced ? ` ✓ ${synced} 顆已推送` : " · 未推送";
+      return `<option value="${esc(v.id)}">${esc(v.name)}${flag}</option>`;
+    }));
+  $("#selVoice").innerHTML = opts.join("");
+  $("#batchVoice").innerHTML = opts.join("");
+  // 預設挑第一個「有逐字稿而且推送過」的音色
+  const good = S.voices.find(v => v.transcription && (v.synced_engines || []).length >= 2);
+  if (good) { $("#selVoice").value = good.id; $("#batchVoice").value = good.id; }
+}
+
+async function loadPresets() {
+  const data = await api("/api/presets");
+  S.presets = data.presets || [];
+  S.categories = data.categories || [];
+  S.catLabels = data.category_labels || {};
+  $("#presetChips").innerHTML = S.presets
+    .map(p => `<span class="chip" data-id="${esc(p.id)}">${esc(p.label)}</span>`).join("");
+  $$("#presetChips .chip").forEach(el => el.onclick = () => {
+    const p = S.presets.find(x => x.id === el.dataset.id);
+    if (!p) return;
+    $("#txtInput").value = p.text;
+    $("#txtInput").dataset.presetId = p.id;
+    $("#txtInput").dataset.category = p.category;
+    $$("#presetChips .chip").forEach(c => c.classList.toggle("on", c === el));
+  });
+
+  $("#batchCats").innerHTML = S.categories
+    .map(c => `<span class="chip" data-id="${esc(c.id)}">${esc(c.label)} <span class="sub">${c.count}</span></span>`).join("");
+  $$("#batchCats .chip").forEach(el => el.onclick = () => {
+    const id = el.dataset.id;
+    S.batchCats.has(id) ? S.batchCats.delete(id) : S.batchCats.add(id);
+    el.classList.toggle("on", S.batchCats.has(id));
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   競技場：跑評測
+   ════════════════════════════════════════════════════════════════════════ */
+$("#btnRun").onclick = async () => {
+  const text = $("#txtInput").value.trim();
+  if (!text) { $("#runErr").textContent = "請先輸入要評測的文字"; return; }
+  if (!S.picked.size) { $("#runErr").textContent = "至少要選一個引擎"; return; }
+
+  setBusy(true);
+  $("#runErr").textContent = "";
+  $("#runProg").hidden = false;
+  $("#trialCard").hidden = true;
+
+  try {
+    const payload = {
+      text,
+      engines: Array.from(S.picked),
+      mode: $("#selMode").value,
+      repeats: +$("#selRepeats").value,
+      voice_id: $("#selVoice").value,
+      speed: +$("#numSpeed").value || 1.0,
+      score: $("#chkScore").checked,
+      normalize_volume: $("#chkNorm").checked,
+      preset_id: $("#txtInput").dataset.presetId || "",
+      category: $("#txtInput").dataset.category || "custom",
+    };
+    const { job_id } = await post("/api/trials", payload);
+    const trial = await poll(job_id, j => {
+      $("#runProg").value = j.progress || 0;
+      $("#runStatus").textContent = j.message || "";
+    });
+    showTrial(trial);
+    $("#runStatus").textContent = "完成";
+  } catch (e) {
+    $("#runErr").textContent = e.message;
+    $("#runStatus").textContent = "";
+  } finally {
+    $("#runProg").hidden = true;
+    setBusy(false);
+  }
+};
+
+function setBusy(v) {
+  S.busy = v;
+  $("#btnRun").disabled = v;
+  $("#btnWarm").disabled = v;
+  $("#btnBatch").disabled = v;
+}
+
+$("#btnWarm").onclick = () => runWarmup(Array.from(S.picked), "#runStatus");
+$("#btnWarmAll").onclick = () => runWarmup(null, "#engStatus");
+
+async function runWarmup(keys, statusSel) {
+  setBusy(true);
+  try {
+    const { job_id } = await post("/api/warmup", keys ? { engines: keys } : {});
+    const res = await poll(job_id, j => { $(statusSel).textContent = j.message || ""; });
+    const bad = Object.entries(res).filter(([, v]) => !v.ok);
+    $(statusSel).textContent = bad.length
+      ? "暖機完成，但這幾顆有問題：" + bad.map(([k, v]) => `${k}（${v.error}）`).join("、")
+      : "暖機完成，全部模型已載入 GPU";
+    await loadStatus();
+  } catch (e) {
+    $(statusSel).textContent = "暖機失敗：" + e.message;
+  } finally { setBusy(false); }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   競技場：盲測與投票
+   ════════════════════════════════════════════════════════════════════════ */
+function showTrial(trial) {
+  S.trial = trial;
+  S.ranking = [];
+  $("#trialCard").hidden = false;
+  $("#voteNote").value = "";
+  renderTrial();
+  $("#trialCard").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function renderTrial() {
+  const t = S.trial;
+  const slots = t.slots || [];
+  const box = $("#slotBox");
+  box.className = "slots n" + Math.min(slots.length, 4);
+
+  if (!t.revealed) {
+    $("#trialTitle").textContent = t.mode === "ranking" ? "盲測 — 排出名次" : "盲測 — 選一個";
+    const extra = t.hidden_count
+      ? `另外還有 ${t.hidden_count} 顆引擎也跑了這一句，但不列入這次投票（揭曉後才會顯示）。`
+      : "";
+    $("#trialHint").textContent =
+      (t.mode === "ranking"
+        ? "依序點選，從最好點到最差。投票前不會顯示引擎名稱，連秒數都藏著 —— 速度差距本身就是識別特徵。"
+        : "聽完再選。投票前不會顯示引擎名稱，連秒數都藏著。") + " " + extra;
+  } else {
+    $("#trialTitle").textContent = "結果";
+    $("#trialHint").textContent = `${t.chars} 字 · ${bench_modeLabel(t.mode)}` +
+      (t.repeats > 1 ? ` · 每顆跑 ${t.repeats} 次` : "") +
+      (t.voice_name ? ` · 音色：${t.voice_name}` : "");
+  }
+
+  box.innerHTML = slots.map(s => {
+    const rankIdx = S.ranking.indexOf(s.slot);
+    const badge = rankIdx >= 0 ? `<span class="rank-badge">第 ${rankIdx + 1}</span>` : "";
+    const isWinner = t.vote && t.vote.winner && s.engine === t.vote.winner;
+    const who = t.revealed
+      ? esc(s.engine_label || s.engine)
+      : "？？？";
+    return `<div class="side ${isWinner ? "win" : ""} ${rankIdx >= 0 ? "picked" : ""}" data-slot="${s.slot}">
+        <div class="slot">${s.slot} ${badge}</div>
+        <div class="who">${who}</div>
+        <audio controls preload="none" src="${s.url}"></audio>
+      </div>`;
+  }).join("");
+
+  if (t.mode === "ranking" && !t.revealed) {
+    $$(".side", box).forEach(el => el.onclick = ev => {
+      if (ev.target.tagName === "AUDIO") return;
+      const slot = el.dataset.slot;
+      if (S.ranking.includes(slot)) return;
+      S.ranking.push(slot);
+      renderTrial();
+    });
+  }
+
+  renderVoteButtons();
+  renderReveal();
+}
+
+const bench_modeLabel = m => ({ duel: "對決", ranking: "排名", open: "公開" }[m] || m);
+
+function renderVoteButtons() {
+  const t = S.trial, box = $("#voteBox");
+  if (t.revealed) { box.innerHTML = ""; $("#voteNote").parentElement && ($("#voteNote").style.display = "none"); return; }
+  $("#voteNote").style.display = "";
+
+  if (t.mode === "ranking") {
+    const done = S.ranking.length === (t.slots || []).length;
+    box.innerHTML =
+      `<span class="muted" style="font-size:12.5px">已排 ${S.ranking.length}/${(t.slots||[]).length}：
+        ${S.ranking.map((s, i) => `${i + 1}. ${s}`).join("　") || "（依序點選上面的格子）"}</span>
+       <div class="spacer"></div>
+       <button class="small" id="vbReset">重排</button>
+       <button class="small" id="vbSkip">直接揭曉</button>
+       <button class="primary" id="vbSubmit" ${done ? "" : "disabled"}>送出排名</button>`;
+    $("#vbReset").onclick = () => { S.ranking = []; renderTrial(); };
+    $("#vbSkip").onclick = () => doReveal();
+    $("#vbSubmit").onclick = () => doVote({ ranking: S.ranking });
+  } else {
+    const btns = (t.slots || []).map(s =>
+      `<button class="primary" data-choice="${s.slot}">${s.slot} 比較好</button>`).join("");
+    box.innerHTML = btns +
+      `<button data-choice="tie">平手</button>
+       <button data-choice="bad">兩個都不行</button>
+       <div class="spacer"></div>
+       <button class="small" id="vbSkip">直接揭曉</button>`;
+    $$("#voteBox button[data-choice]").forEach(b =>
+      b.onclick = () => doVote({ choice: b.dataset.choice }));
+    $("#vbSkip").onclick = () => doReveal();
+  }
+}
+
+async function doVote(payload) {
+  try {
+    payload.note = $("#voteNote").value;
+    S.trial = await post(`/api/trials/${S.trial.id}/vote`, payload);
+    renderTrial();
+    loadPendingCount();
+  } catch (e) { $("#runErr").textContent = e.message; }
+}
+
+async function doReveal() {
+  try {
+    S.trial = await post(`/api/trials/${S.trial.id}/reveal`, {});
+    renderTrial();
+    loadPendingCount();
+  } catch (e) { $("#runErr").textContent = e.message; }
+}
+
+/** 揭曉後的完整數據表。 */
+function renderReveal() {
+  const t = S.trial, box = $("#revealBox");
+  if (!t.revealed || !t.samples) { box.innerHTML = ""; return; }
+
+  const rows = t.samples;
+  const exEl  = extremes(rows, r => r.elapsed_seconds, true);
+  const exRtf = extremes(rows, r => r.rtf, true);
+  const exCer = extremes(rows, r => r.cer, true);
+
+  const voteLine = t.vote
+    ? (t.vote.ranking
+        ? `你的排名：${t.vote.ranked_engines.map((e, i) => `${i + 1}. ${engLabel(e)}`).join("　")}`
+        : t.vote.choice === "tie" ? "你投了：平手"
+        : t.vote.choice === "bad" ? "你投了：兩個都不行"
+        : `你選的是：<b>${esc(engLabel(t.vote.winner))}</b>`)
+    : "（沒有投票，這筆不列入排名統計）";
+
+  const cmp = t.comparability || {};
+  let html = `<h3>這一筆的結果</h3>
+    <div class="banner">${voteLine}<br /><span class="muted">${esc(cmp.note || "")}</span></div>
+    <div class="tw"><table><thead><tr>
+      <th>引擎</th><th>音色</th><th>合成耗時</th><th>音檔長度</th><th>RTF</th>
+      <th>即時倍速</th><th>首段延遲</th><th>CER</th><th>取樣率</th>
+    </tr></thead><tbody>`;
+
+  for (const r of rows) {
+    if (r.error) {
+      html += `<tr><td>${esc(r.engine_label)}</td>
+        <td colspan="8" class="worst" style="text-align:left">${esc(r.error)}</td></tr>`;
+      continue;
+    }
+    const sd = (r.elapsed_spread || {}).stdev;
+    html += `<tr>
+      <td>${esc(r.engine_label)}</td>
+      <td class="sub" style="text-align:left">${esc(r.voice_label || "—")}</td>
+      <td${mark(r.elapsed_seconds, exEl)}>${secs(r.elapsed_seconds)}${
+        sd != null ? `<span class="sub"> ±${n2(sd)}</span>` : ""}</td>
+      <td class="num">${secs(r.duration_seconds)}</td>
+      <td${mark(r.rtf, exRtf)}>${n3(r.rtf)}</td>
+      <td class="num">${n2(r.realtime_x)}×</td>
+      <td class="num">${secs(r.first_chunk_seconds)}</td>
+      <td${mark(r.cer, exCer)}>${r.cer == null ? "—" : pct(r.cer)}</td>
+      <td class="num">${khz(r.sample_rate)}</td>
+    </tr>`;
+  }
+  html += `</tbody></table></div>`;
+
+  // ASR 辨識結果 + 音訊警訊
+  for (const r of rows) {
+    const warns = r.audio_warnings || [];
+    if (!r.asr_text && !warns.length) continue;
+    html += `<h3>${esc(r.engine_label)}</h3>`;
+    if (r.asr_text) {
+      html += `<div class="banner"><span class="muted">ASR 聽到：</span>${esc(r.asr_text)}</div>`;
+    }
+    if (warns.length) {
+      html += `<ul class="warnlist">${warns.map(w => `<li>${esc(w)}</li>`).join("")}</ul>`;
+    }
+    if (r.url) html += `<audio controls preload="none" src="${r.url}" style="width:100%;margin-top:8px"></audio>`;
+  }
+  box.innerHTML = html;
+}
+
+const engLabel = k => {
+  const e = (S.status?.engines || []).find(x => x.key === k);
+  return e ? e.label : k;
+};
+
+/* ════════════════════════════════════════════════════════════════════════
+   排行榜
+   ════════════════════════════════════════════════════════════════════════ */
+async function loadBoard() {
+  let d;
+  try { d = await api("/api/leaderboard"); }
+  catch (e) { $("#boardStatus").textContent = e.message; return; }
+
+  const rows = d.engines.filter(r => r.trials > 0);
+  $("#eloMeta").textContent =
+    `${d.totals.trials} 筆評測 · ${d.totals.votes} 次投票 · ${d.totals.pairs} 組成對比較`;
+
+  // ---- Elo 條 ----
+  const voted = rows.filter(r => r.games > 0);
+  if (!voted.length) {
+    $("#eloBox").innerHTML = `<div class="empty">還沒有投票紀錄。到競技場跑幾筆盲測，排名才會出現。</div>`;
+  } else {
+    const lo = Math.min(...voted.map(r => r.elo_low ?? r.elo)) - 20;
+    const hi = Math.max(...voted.map(r => r.elo_high ?? r.elo)) + 20;
+    const span = Math.max(hi - lo, 1);
+    const posOf = v => ((v - lo) / span) * 100;
+    $("#eloBox").innerHTML = voted.map(r => {
+      const l = r.elo_low ?? r.elo, h = r.elo_high ?? r.elo;
+      return `<div class="elo-row">
+        <div><b>${esc(r.engine_label)}</b><br /><span class="sub">${r.wins}勝 ${r.losses}敗 ${r.ties}平</span></div>
+        <div class="elo-track">
+          <div class="elo-ci" style="left:${posOf(l)}%;width:${Math.max(posOf(h) - posOf(l), 0.6)}%"></div>
+          <div class="elo-pt" style="left:${posOf(r.elo)}%"></div>
+        </div>
+        <div class="elo-val">${n1(r.elo)}<small>${r.elo_low == null ? "樣本不足" : n1(l) + "–" + n1(h)}</small></div>
+      </div>`;
+    }).join("");
+  }
+
+  // ---- 判讀提醒 ----
+  const caveats = d.caveats || [];
+  $("#caveatCard").hidden = !caveats.length;
+  $("#caveatList").innerHTML = caveats.map(c => `<li>${esc(c)}</li>`).join("");
+
+  // ---- 速度與吐字 ----
+  const exEl  = extremes(rows, r => r.elapsed.median, true);
+  const exP95 = extremes(rows, r => r.elapsed.p95, true);
+  const exRtf = extremes(rows, r => r.rtf.median, true);
+  const exCer = extremes(rows, r => r.cer, true);
+  const exCv  = extremes(rows, r => r.stability_cv, true);
+  const base  = d.asr_baseline;
+
+  $("#tblSpeed").innerHTML = `<thead><tr>
+      <th>引擎</th><th>成功／總筆數</th><th>耗時中位數</th><th>耗時 p95</th>
+      <th>RTF</th><th>首段延遲</th><th>穩定性 CV</th><th>CER</th><th>已評分</th>
+    </tr></thead><tbody>` + rows.map(r => `<tr>
+      <td><b>${esc(r.engine_label)}</b><br /><span class="sub">${esc(r.voice)}</span></td>
+      <td class="num">${r.ok}/${r.trials}${r.failed ? ` <span class="worst">(${r.failed} 失敗)</span>` : ""}</td>
+      <td${mark(r.elapsed.median, exEl)}>${secs(r.elapsed.median)}</td>
+      <td${mark(r.elapsed.p95, exP95)}>${secs(r.elapsed.p95)}</td>
+      <td${mark(r.rtf.median, exRtf)}>${n3(r.rtf.median)}</td>
+      <td class="num">${secs(r.first_chunk.median)}</td>
+      <td${mark(r.stability_cv, exCv)}>${r.stability_cv == null ? "—" : pct(r.stability_cv)}</td>
+      <td${mark(r.cer, exCer)}>${r.cer == null ? "—" : pct(r.cer)}</td>
+      <td class="num sub">${r.scored_count}</td>
+    </tr>`).join("") + `</tbody>` +
+    (base && base.cer != null
+      ? `<tfoot><tr><td colspan="9" class="sub" style="text-align:left;padding-top:10px">
+          ASR 誤差底線：拿真人錄音「${esc(base.voice_name)}」辨識，CER = <b>${pct(base.cer)}</b>。
+          引擎的 CER 接近這個數字就代表吐字已經沒問題了。</td></tr></tfoot>` : "");
+
+  // ---- 分類戰報 ----
+  const cats = Object.entries(d.categories || {});
+  if (!cats.length) {
+    $("#tblCat").innerHTML = `<tbody><tr><td class="empty">還沒有分類資料</td></tr></tbody>`;
+  } else {
+    const keys = rows.map(r => r.engine);
+    $("#tblCat").innerHTML = `<thead><tr><th>文本類型</th>` +
+      keys.map(k => `<th>${esc(engLabel(k))}</th>`).join("") + `<th>筆數</th></tr></thead><tbody>` +
+      cats.map(([cid, c]) => {
+        const cells = keys.map(k => {
+          const cell = c.engines[k];
+          if (!cell) return `<td class="num sub">—</td>`;
+          const best = c.best_cer === k;
+          return `<td class="${best ? "best" : ""} num">${cell.cer == null ? "—" : pct(cell.cer)}
+            <span class="sub">${secs(cell.elapsed)}</span></td>`;
+        }).join("");
+        return `<tr><td><b>${esc(c.label)}</b></td>${cells}<td class="num sub">${c.trials}</td></tr>`;
+      }).join("") + `</tbody>`;
+  }
+
+  // ---- 對戰矩陣 ----
+  const m = d.matrix;
+  if (!m.engines.length) {
+    $("#tblMatrix").innerHTML = `<tbody><tr><td class="empty">還沒有對戰資料</td></tr></tbody>`;
+  } else {
+    $("#tblMatrix").innerHTML = `<thead><tr><th>勝 ╲ 負</th>` +
+      m.engines.map(k => `<th style="text-align:center">${esc(engLabel(k))}</th>`).join("") +
+      `</tr></thead><tbody>` + m.rows.map(row => `<tr><td><b>${esc(engLabel(row.engine))}</b></td>` +
+        m.engines.map(k => {
+          const c = row.cells[k];
+          if (!c) return `<td class="cell self">—</td>`;
+          if (!c.games) return `<td class="cell sub">未交手</td>`;
+          return `<td class="cell">${c.win_rate == null ? "—" : pct(c.win_rate)}
+            <span class="mini">${c.wins}–${c.losses}${c.ties ? ` (${c.ties}平)` : ""}</span></td>`;
+        }).join("") + `</tr>`).join("") + `</tbody>`;
+  }
+
+  // ---- 音訊指標 ----
+  const exBw = extremes(rows, r => r.audio.bandwidth_ratio, false);
+  const exSil = extremes(rows, r => r.audio.silence_ratio, true);
+  $("#tblAudio").innerHTML = `<thead><tr>
+      <th>引擎</th><th>宣稱取樣率</th><th>頻寬比</th><th>靜音比例</th>
+      <th>開頭靜音</th><th>削波</th><th>RMS</th><th>語速（字/秒）</th>
+    </tr></thead><tbody>` + rows.map(r => {
+      const a = r.audio;
+      return `<tr>
+        <td><b>${esc(r.engine_label)}</b>${
+          (r.audio_warnings || []).length
+            ? `<br /><span class="sub" style="color:var(--warn)">${esc(r.audio_warnings[0][0])}（${r.audio_warnings[0][1]} 筆）</span>` : ""}</td>
+        <td class="num">${khz(r.sample_rate)}</td>
+        <td${mark(a.bandwidth_ratio, exBw)}>${a.bandwidth_ratio == null ? "—" : pct(a.bandwidth_ratio)}</td>
+        <td${mark(a.silence_ratio, exSil)}>${a.silence_ratio == null ? "—" : pct(a.silence_ratio)}</td>
+        <td class="num">${a.lead_silence == null ? "—" : n2(a.lead_silence) + " 秒"}</td>
+        <td class="num">${a.clip_ratio == null ? "—" : (a.clip_ratio * 100).toFixed(3) + "%"}</td>
+        <td class="num">${a.rms_dbfs == null ? "—" : n1(a.rms_dbfs) + " dB"}</td>
+        <td class="num">${n2(a.chars_per_voiced_second)}</td>
+      </tr>`;
+    }).join("") + `</tbody>`;
+
+  $("#boardStatus").textContent = "";
+}
+
+$("#btnBoardRefresh").onclick = loadBoard;
+$("#btnCsv").onclick = () => { window.location.href = "/api/export.csv"; };
+$("#btnBaseline").onclick = async () => {
+  $("#boardStatus").textContent = "量測中…";
+  try {
+    const { job_id } = await post("/api/asr-baseline", {});
+    const r = await poll(job_id, j => { $("#boardStatus").textContent = j.message || ""; });
+    $("#boardStatus").textContent = r.error
+      ? "量測失敗：" + r.error
+      : `ASR 誤差底線 = ${pct(r.cer)}（真人錄音「${r.voice_name}」）`;
+    loadBoard();
+  } catch (e) { $("#boardStatus").textContent = e.message; }
+};
+
+/* ════════════════════════════════════════════════════════════════════════
+   批次
+   ════════════════════════════════════════════════════════════════════════ */
+$("#btnBatch").onclick = async () => {
+  if (!S.batchPicked.size) { $("#batchErr").textContent = "至少要選一個引擎"; return; }
+  setBusy(true);
+  $("#batchErr").textContent = "";
+  $("#batchProg").hidden = false;
+  try {
+    const { job_id, item_count } = await post("/api/batches", {
+      engines: Array.from(S.batchPicked),
+      categories: Array.from(S.batchCats),
+      mode: $("#batchMode").value,
+      repeats: +$("#batchRepeats").value,
+      voice_id: $("#batchVoice").value,
+      score: $("#batchScore").checked,
+    });
+    $("#batchStatus").textContent = `已排入 ${item_count} 句…`;
+    const rep = await poll(job_id, j => {
+      $("#batchProg").value = j.progress || 0;
+      $("#batchStatus").textContent = j.message || "";
+    });
+    $("#batchStatus").textContent = `完成：${rep.done} 句成功、${rep.failed} 句失敗`;
+    await loadBatches();
+    showBatchReport(rep);
+    loadPendingCount();
+  } catch (e) {
+    $("#batchErr").textContent = e.message;
+  } finally {
+    $("#batchProg").hidden = true;
+    setBusy(false);
+  }
+};
+
+async function loadBatches() {
+  let d;
+  try { d = await api("/api/batches"); } catch { return; }
+  const items = d.items || [];
+  if (!items.length) { $("#batchList").innerHTML = `<div class="empty">還沒有批次報表</div>`; return; }
+  $("#batchList").innerHTML = items.map(b => {
+    const s = b.summary || {};
+    const bits = [];
+    if (s.fastest) bits.push(`最快：<b>${esc(engLabel(s.fastest))}</b>`);
+    if (s.best_cer) bits.push(`吐字最準：<b>${esc(engLabel(s.best_cer))}</b>`);
+    if (s.most_stable) bits.push(`最穩定：<b>${esc(engLabel(s.most_stable))}</b>`);
+    return `<div class="list-item">
+      <div class="top">
+        <b class="mono">${esc(b.id)}</b>
+        <span class="muted">${when(b.created_at)}</span>
+        <span class="badge">${esc(bench_modeLabel(b.mode))}</span>
+        <span class="muted">${b.done}/${b.item_count} 句${b.failed ? ` · ${b.failed} 失敗` : ""}</span>
+        <div class="spacer"></div>
+        <button class="small" data-open="${esc(b.id)}">看報表</button>
+        <button class="small danger" data-del="${esc(b.id)}">刪除</button>
+      </div>
+      ${bits.length ? `<div class="txt">${bits.join(" · ")}</div>` : ""}
+    </div>`;
+  }).join("");
+
+  $$("#batchList [data-open]").forEach(b => b.onclick = async () => {
+    showBatchReport(await api(`/api/batches/${b.dataset.open}`));
+  });
+  $$("#batchList [data-del]").forEach(b => b.onclick = async () => {
+    await del(`/api/batches/${b.dataset.del}`);
+    loadBatches();
+  });
+}
+
+function showBatchReport(rep) {
+  const card = $("#batchReportCard");
+  card.hidden = false;
+  $("#batchReportTitle").textContent = `報表 ${rep.id}`;
+  const s = rep.summary;
+  if (!s) { $("#batchReport").innerHTML = `<div class="empty">這份報表還沒跑完</div>`; return; }
+
+  const rows = rep.engines.map(k => s.per_engine[k]).filter(Boolean);
+  const exEl = extremes(rows, r => r.elapsed.median, true);
+  const exCer = extremes(rows, r => r.cer, true);
+  const exCv = extremes(rows, r => r.stability_cv, true);
+
+  let html = `<div class="banner">
+      ${rep.item_count} 句 × ${rep.engines.length} 個引擎 ·
+      ${bench_modeLabel(rep.mode)}${rep.repeats > 1 ? ` · 每句 ${rep.repeats} 次` : ""}
+      ${rep.voice_name ? ` · 音色：${esc(rep.voice_name)}` : ""}
+      <br /><span class="muted">${when(rep.created_at)} 起跑${rep.finished_at ? `，${when(rep.finished_at)} 完成` : ""}</span>
+    </div>
+    <div class="tw"><table><thead><tr>
+      <th>引擎</th><th>成功率</th><th>耗時中位數</th><th>耗時 p95</th>
+      <th>RTF</th><th>CER</th><th>穩定性 CV</th>
+    </tr></thead><tbody>` + rows.map(r => `<tr>
+      <td><b>${esc(r.engine_label)}</b>${
+        r.top_errors.length ? `<br /><span class="sub worst">${esc(r.top_errors[0][0])}</span>` : ""}</td>
+      <td class="num">${r.success_rate == null ? "—" : pct(r.success_rate)}
+        <span class="sub">${r.ok}/${r.ok + r.failed}</span></td>
+      <td${mark(r.elapsed.median, exEl)}>${secs(r.elapsed.median)}</td>
+      <td class="num">${secs(r.elapsed.p95)}</td>
+      <td class="num">${n3(r.rtf.median)}</td>
+      <td${mark(r.cer, exCer)}>${r.cer == null ? "—" : pct(r.cer)}</td>
+      <td${mark(r.stability_cv, exCv)}>${r.stability_cv == null ? "—" : pct(r.stability_cv)}</td>
+    </tr>`).join("") + `</tbody></table></div>`;
+
+  const cats = Object.entries(s.categories || {});
+  if (cats.length) {
+    html += `<h3>分類明細</h3><div class="tw"><table><thead><tr><th>類型</th>` +
+      rep.engines.map(k => `<th>${esc(engLabel(k))}</th>`).join("") + `</tr></thead><tbody>` +
+      cats.map(([cid, c]) => `<tr><td><b>${esc(c.label)}</b></td>` +
+        rep.engines.map(k => {
+          const cell = c.engines[k];
+          return `<td class="num">${!cell ? "—" : (cell.cer == null ? "—" : pct(cell.cer))}
+            <span class="sub">${cell ? secs(cell.elapsed) : ""}</span></td>`;
+        }).join("") + `</tr>`).join("") + `</tbody></table></div>`;
+  }
+  $("#batchReport").innerHTML = html;
+  card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   紀錄
+   ════════════════════════════════════════════════════════════════════════ */
+async function loadPendingCount() {
+  try {
+    const d = await api("/api/trials/pending?limit=1");
+    const pip = $("#pipPending");
+    pip.hidden = !d.total;
+    pip.textContent = d.total;
+  } catch { /* 忽略 */ }
+}
+
+async function loadHistory() {
+  try {
+    const p = await api("/api/trials/pending?limit=30");
+    $("#pendingCard").hidden = !p.total;
+    $("#pendingCount").textContent = p.total ? `${p.total} 筆` : "";
+    $("#pendingList").innerHTML = (p.items || []).map(t => `<div class="list-item">
+        <div class="top">
+          <span class="badge">${esc(bench_modeLabel(t.mode))}</span>
+          <span class="muted">${when(t.created_at)}</span>
+          <span class="muted">${t.chars} 字</span>
+          <div class="spacer"></div>
+          <button class="small primary" data-vote="${esc(t.id)}">去投票</button>
+        </div>
+        <div class="txt">${esc(t.text.slice(0, 80))}${t.text.length > 80 ? "…" : ""}</div>
+      </div>`).join("");
+    $$("#pendingList [data-vote]").forEach(b => b.onclick = async () => {
+      const t = await api(`/api/trials/${b.dataset.vote}`);
+      $$("#nav button").forEach(x => x.classList.toggle("on", x.dataset.p === "arena"));
+      $$(".page").forEach(pg => pg.classList.toggle("on", pg.id === "p-arena"));
+      showTrial(t);
+    });
+  } catch { /* 忽略 */ }
+
+  let d;
+  try { d = await api("/api/trials?limit=60"); } catch { return; }
+  const items = d.items || [];
+  if (!items.length) { $("#histList").innerHTML = `<div class="empty">還沒有評測紀錄</div>`; return; }
+
+  $("#histList").innerHTML = items.map(t => {
+    const winner = t.vote && t.vote.winner ? engLabel(t.vote.winner) : null;
+    const verdict = !t.vote ? `<span class="muted">未投票</span>`
+      : t.vote.ranking ? `排名：${t.vote.ranked_engines.map(engLabel).join(" > ")}`
+      : t.vote.choice === "tie" ? "平手"
+      : t.vote.choice === "bad" ? "兩個都不行"
+      : `勝出：<b>${esc(winner)}</b>`;
+    const speeds = (t.samples || []).filter(s => !s.error)
+      .map(s => `${esc(s.engine_label)} ${secs(s.elapsed_seconds)}${s.cer != null ? ` / CER ${pct(s.cer)}` : ""}`)
+      .join("　·　");
+    return `<div class="list-item">
+      <div class="top">
+        <span class="badge">${esc(bench_modeLabel(t.mode))}</span>
+        <span class="muted">${when(t.created_at)}</span>
+        <span class="muted">${esc(S.catLabels[t.category] || t.category)} · ${t.chars} 字</span>
+        ${t.batch_id ? `<span class="badge mono">${esc(t.batch_id)}</span>` : ""}
+        <div class="spacer"></div>
+        <button class="small danger" data-del="${esc(t.id)}">刪除</button>
+      </div>
+      <div class="txt">${esc(t.text.slice(0, 90))}${t.text.length > 90 ? "…" : ""}</div>
+      <div class="sub">${verdict}${speeds ? `　·　${speeds}` : ""}</div>
+    </div>`;
+  }).join("");
+
+  $$("#histList [data-del]").forEach(b => b.onclick = async () => {
+    await del(`/api/trials/${b.dataset.del}`);
+    loadHistory();
+  });
+}
+
+$("#btnHistRefresh").onclick = loadHistory;
+$("#btnClearAll").onclick = async () => {
+  if (!confirm("確定要清空全部評測紀錄與音檔？這個動作無法復原。")) return;
+  await del("/api/trials");
+  loadHistory(); loadPendingCount();
+};
+
+/* ════════════════════════════════════════════════════════════════════════
+   音色
+   ════════════════════════════════════════════════════════════════════════ */
+$("#btnUpload").onclick = async () => {
+  const f = $("#vFile").files[0];
+  if (!f) { $("#vErr").textContent = "請先選一個音檔"; return; }
+  $("#vErr").textContent = "";
+  $("#vStatus").textContent = "上傳中…";
+
+  const fd = new FormData();
+  fd.append("file", f);
+  fd.append("name", $("#vName").value || f.name);
+  fd.append("transcription", $("#vText").value);
+  fd.append("auto_transcribe", $("#vAuto").checked ? "true" : "false");
+
+  try {
+    const res = await fetch("/api/voices", { method: "POST", body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "上傳失敗");
+
+    if (data.transcribe_job_id) {
+      $("#vStatus").textContent = "辨識逐字稿中…";
+      await poll(data.transcribe_job_id, j => { $("#vStatus").textContent = j.message || ""; });
+    }
+    // 逐字稿處理完才推送 —— 少了逐字稿推過去，克隆相似度會明顯掉
+    $("#vStatus").textContent = "推送到各引擎…";
+    const { job_id } = await post(`/api/voices/${data.voice.id}/push`, {});
+    const r = await poll(job_id, j => { $("#vStatus").textContent = j.message || ""; });
+    const bad = (r.results || []).filter(x => !x.ok);
+    $("#vStatus").textContent = bad.length
+      ? `已上傳，但這幾顆推送失敗：${bad.map(x => x.engine).join("、")}`
+      : `已上傳並推送到 ${(r.results || []).length} 顆引擎`;
+    $("#vFile").value = ""; $("#vName").value = ""; $("#vText").value = "";
+    await loadVoices(); await loadVoiceOptions(); await loadStatus();
+  } catch (e) {
+    $("#vErr").textContent = e.message;
+    $("#vStatus").textContent = "";
+  }
+};
+
+const SYNC_LABEL = {
+  synced: ["✓", "var(--accent-2)"], stale: ["⟳ 已過期", "var(--warn)"],
+  missing: ["· 未推送", "var(--muted)"], failed: ["✕ 失敗", "var(--danger)"],
+  unsupported: ["— 不支援克隆", "var(--muted)"],
+};
+
+async function loadVoices() {
+  let d;
+  try { d = await api("/api/voices"); } catch { return; }
+  S.voices = d.voices || [];
+  if (!S.voices.length) { $("#voiceList").innerHTML = `<div class="empty">音色庫是空的</div>`; return; }
+
+  $("#voiceList").innerHTML = S.voices.map(v => {
+    const sync = Object.entries(v.sync || {}).map(([k, s]) => {
+      const [txt, color] = SYNC_LABEL[s.state] || ["?", "var(--muted)"];
+      return `<span class="tag" style="color:${color};border-color:${color}"
+        title="${esc(s.detail || "")}">${esc(s.label)} ${txt}</span>`;
+    }).join(" ");
+    return `<div class="list-item">
+      <div class="top">
+        <b>${esc(v.name)}</b>
+        <span class="muted">${n1(v.duration)} 秒</span>
+        ${v.ready_for_timbre ? `<span class="tag clone">音色可比</span>`
+          : `<span class="tag warn">推送不足兩顆，音色不可比</span>`}
+        <div class="spacer"></div>
+        <audio controls preload="none" src="/api/voices/${esc(v.id)}/audio" style="height:32px"></audio>
+      </div>
+      <div class="txt">${v.transcription
+        ? esc(v.transcription)
+        : `<span style="color:var(--warn)">⚠ 還沒有逐字稿 —— 克隆相似度會明顯下降</span>`}</div>
+      <div class="row" style="margin-top:8px">
+        <div>${sync}</div>
+        <div class="spacer"></div>
+        ${!v.transcription ? `<button class="small" data-asr="${esc(v.id)}">自動辨識</button>` : ""}
+        <button class="small" data-push="${esc(v.id)}">推送到各引擎</button>
+        <button class="small danger" data-delv="${esc(v.id)}">刪除</button>
+      </div>
+    </div>`;
+  }).join("");
+
+  $$("#voiceList [data-push]").forEach(b => b.onclick = async () => {
+    b.disabled = true; $("#vStatus").textContent = "推送中…";
+    try {
+      const { job_id } = await post(`/api/voices/${b.dataset.push}/push`, { force: true });
+      const r = await poll(job_id, j => { $("#vStatus").textContent = j.message || ""; });
+      const bad = (r.results || []).filter(x => !x.ok);
+      $("#vStatus").textContent = bad.length
+        ? `推送失敗：${bad.map(x => `${x.engine}（${x.error}）`).join("；")}`
+        : `已推送到 ${(r.results || []).length} 顆引擎`;
+      await loadVoices(); await loadVoiceOptions();
+    } catch (e) { $("#vErr").textContent = e.message; }
+    finally { b.disabled = false; }
+  });
+
+  $$("#voiceList [data-asr]").forEach(b => b.onclick = async () => {
+    b.disabled = true;
+    try {
+      const { job_id } = await post(`/api/voices/${b.dataset.asr}/transcribe`, {});
+      await poll(job_id, j => { $("#vStatus").textContent = j.message || ""; });
+      $("#vStatus").textContent = "辨識完成，已重新推送";
+      await loadVoices(); await loadVoiceOptions();
+    } catch (e) { $("#vErr").textContent = e.message; }
+    finally { b.disabled = false; }
+  });
+
+  $$("#voiceList [data-delv]").forEach(b => b.onclick = async () => {
+    if (!confirm("刪除這個音色？各引擎上的副本也會一起刪掉。")) return;
+    await del(`/api/voices/${b.dataset.delv}`);
+    await loadVoices(); await loadVoiceOptions(); await loadStatus();
+  });
+}
+
+$("#btnVoiceRefresh").onclick = loadVoices;
+$("#btnPushAll").onclick = async () => {
+  $("#vStatus").textContent = "全部重新推送中…";
+  try {
+    const { job_id } = await post("/api/voices/push-all", { force: true });
+    await poll(job_id, j => { $("#vStatus").textContent = j.message || ""; });
+    $("#vStatus").textContent = "全部推送完成";
+    await loadVoices(); await loadVoiceOptions();
+  } catch (e) { $("#vErr").textContent = e.message; }
+};
+
+/* ════════════════════════════════════════════════════════════════════════
+   引擎
+   ════════════════════════════════════════════════════════════════════════ */
+function renderEngines() {
+  if (!S.status) return;
+  $("#engineList").innerHTML = S.status.engines.map(e => {
+    const rows = [
+      ["端點", `<span class="mono">${esc(e.endpoint || "—")}</span>`],
+      ["模型名稱", esc(e.model || "—")],
+      ["支援 mode", (e.modes || []).length ? esc((e.modes || []).join(" / ")) : "<span class='muted'>探測不到</span>"],
+      ["輸出取樣率", khz(e.sample_rate)],
+      ["模型狀態", e.loaded == null ? "—" : e.loaded ? "已載入 GPU" : `<span style="color:var(--warn)">${esc(e.status || "idle")} — 需要暖機</span>`],
+      ["內建 speaker", (e.presets || []).length ? esc(e.presets.join("、")) : "—"],
+      ["語速參數", e.honors_speed ? "服務端處理" : "本機變速（服務端會忽略）"],
+    ];
+    if (e.preset_voice) rows.push(["指定 speaker", esc(e.preset_voice)]);
+    if (e.notes) rows.push(["備註", esc(e.notes)]);
+    if (e.caps_error) rows.push(["探測錯誤", `<span class="worst">${esc(e.caps_error)}</span>`]);
+
+    return `<div class="list-item">
+      <div class="top">
+        <b>${esc(e.label)}</b>
+        <span class="badge"><span class="dot ${!e.enabled ? "" : e.loaded ? "ok" : e.caps_error ? "err" : "load"}"></span>
+          ${!e.enabled ? "停用" : e.caps_error ? "連不上" : e.loaded ? "就緒" : "待暖機"}</span>
+        ${e.can_clone ? `<span class="tag clone">可用指定參考音</span>` : `<span class="tag">只有內建音色</span>`}
+        <div class="spacer"></div>
+        <button class="small" data-check="${esc(e.key)}">深度檢查</button>
+      </div>
+      <dl class="kv" style="margin-top:9px">${
+        rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>
+    </div>`;
+  }).join("");
+
+  $$("#engineList [data-check]").forEach(b => b.onclick = async () => {
+    b.disabled = true; b.textContent = "檢查中…";
+    try {
+      const r = await api(`/api/health/${b.dataset.check}?deep=true`);
+      $("#engStatus").textContent = r.ok
+        ? `${r.label} 正常（合成一句花了 ${secs(r.smoke?.elapsed_seconds)}）`
+        : `${r.label} 異常：${r.error}`;
+    } catch (e) { $("#engStatus").textContent = e.message; }
+    finally { b.disabled = false; b.textContent = "深度檢查"; await loadStatus(); renderEngines(); }
+  });
+}
+
+$("#btnReload").onclick = async () => {
+  $("#engStatus").textContent = "重載中…";
+  try {
+    const r = await post("/api/engines/reload", {});
+    S.picked.clear(); S.batchPicked.clear();
+    await loadStatus(); renderEngines();
+    $("#engStatus").textContent = `已重載，共 ${r.engines.length} 個引擎（啟用 ${r.enabled.length} 個）`;
+  } catch (e) { $("#engStatus").textContent = e.message; }
+};
+
+$("#btnDeep").onclick = async () => {
+  const active = S.status.engines.filter(e => e.enabled);
+  for (const e of active) {
+    $("#engStatus").textContent = `深度檢查 ${e.label}…`;
+    try {
+      const r = await api(`/api/health/${e.key}?deep=true`);
+      if (!r.ok) { $("#engStatus").textContent = `${e.label} 異常：${r.error}`; return; }
+    } catch (err) { $("#engStatus").textContent = err.message; return; }
+  }
+  $("#engStatus").textContent = "全部引擎深度檢查通過";
+  await loadStatus(); renderEngines();
+};
+
+$("#btnRefresh").onclick = async () => { await loadStatus(); renderEngines(); };
+
+/* ════════════════════════════════════════════════════════════════════════
+   啟動
+   ════════════════════════════════════════════════════════════════════════ */
+(async function init() {
+  await loadStatus();
+  await loadPresets();
+  const st = S.status;
+  if (st) {
+    $("#selMode").value = st.defaults.mode || "duel";
+    $("#chkScore").checked = st.defaults.score;
+    $("#selRepeats").value = String(st.defaults.repeats || 1);
+  }
+})();
+</script>
+</body>
+</html>

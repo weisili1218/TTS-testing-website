@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+.venv*/
+.DS_Store
+
+# 本機設定（含主機位址與 API key）
+.env
+.env.*
+!.env.example
+
+# 引擎清單是本機的（位址／port／API key），範本用 engines.example.json
+engines.json
+
+# 音色庫、評測音檔、評測紀錄、批次報表
+storage/
+
+# 本機備份檔
+*.bak

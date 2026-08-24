@@ -1,0 +1,36 @@
+[
+  {
+    "key": "cosyvoice2",
+    "label": "CosyVoice2",
+    "base_url": "http://${TTS_HOST}:18001",
+    "model": "cosyvoice2",
+    "speed_mode": "remote",
+    "notes": "zero-shot 克隆。有逐字稿走 inference_zero_shot，音色最像"
+  },
+  {
+    "key": "fun-cosyvoice3",
+    "label": "FunCosyVoice3",
+    "base_url": "http://${TTS_HOST}:18002",
+    "model": "fun-cosyvoice3",
+    "speed_mode": "remote",
+    "notes": "同一份 server.py，COSYVOICE_CLASS=CosyVoice3"
+  },
+  {
+    "key": "qwen3-tts",
+    "label": "Qwen3-TTS",
+    "base_url": "http://${TTS_HOST}:18003",
+    "model": "qwen3-tts",
+    "speed_mode": "local",
+    "preset_voice": "Vivian",
+    "language": "zh",
+    "notes": "只有 preset，不能克隆 -> 音色維度與另外三顆不可比"
+  },
+  {
+    "key": "voxcpm2",
+    "label": "VoxCPM2",
+    "base_url": "http://${TTS_HOST}:18004",
+    "model": "voxcpm2",
+    "speed_mode": "local",
+    "notes": "clone 給了 ref_text 會升級成 ultimate cloning。宣稱 48kHz，記得看頻寬比"
+  }
+]
