@@ -14,21 +14,70 @@
 
 最後再用一個真的 HTTP stub 伺服器驗證 gateway 轉接器送出去的 payload 長相。
 
-執行： python scripts/smoke_test.py
+執行方式
+--------
+    python scripts/smoke_test.py                      跑一次，人看的彩色輸出
+    python scripts/smoke_test.py --quiet              只印失敗與總結（CI 用）
+    python scripts/smoke_test.py --repeat 20          連跑 20 次，抓時好時壞的項目
+    python scripts/smoke_test.py --junit report.xml   產出 CI 讀得懂的測試報告
+    python scripts/smoke_test.py --json result.json   產出機器讀的逐項結果
+
+全部通過回傳 0，有任何一項失敗（或中途爆掉）回傳非 0。
+
+`--repeat` 會用**子行程**各跑一次，再把逐項的成功率統計出來。不在同一個行程裡
+重跑是刻意的 —— 暫存資料夾、模組層被換掉的假物件、config 讀進來的設定，
+第一次跑完就已經被污染了，同行程重跑驗不到真正的初始狀態。
+「20 次裡失敗 2 次」的項目才是要修的東西，跑一次看不出來。
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import time
+import traceback
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    p = argparse.ArgumentParser(
+        prog="smoke_test.py",
+        description="不需要任何遠端服務的完整流程測試",
+    )
+    p.add_argument("--repeat", type=int, default=1, metavar="N",
+                   help="連跑 N 次（每次都是獨立子行程），統計逐項成功率找不穩定的測試")
+    p.add_argument("--jobs", type=int, default=1, metavar="N",
+                   help="--repeat 時同時跑幾個（預設 1；平行會讓跟耗時有關的檢查比較容易抖）")
+    p.add_argument("--json", metavar="檔案", default=None,
+                   help="把逐項結果寫成 JSON；填 - 代表印到 stdout")
+    p.add_argument("--junit", metavar="檔案", default=None,
+                   help="寫出 JUnit XML，給 CI 的測試報告用")
+    p.add_argument("-q", "--quiet", action="store_true",
+                   help="只印失敗的項目與最後的總結")
+    p.add_argument("--no-color", action="store_true", help="不要 ANSI 色碼")
+    p.add_argument("--keep-tmp", action="store_true",
+                   help="通過時也保留暫存資料夾（預設只在失敗時留著給你看）")
+    return p.parse_args(argv)
+
+
+ARGS = parse_args()
+COLOR = (sys.stdout.isatty() and not ARGS.no_color
+         and os.getenv("NO_COLOR") is None and os.getenv("CI") is None)
+
+
+def _c(code: str, text: str) -> str:
+    return f"\033[{code}m{text}\033[0m" if COLOR else text
+
+
+_T0 = time.time()
 _TMP = tempfile.mkdtemp(prefix="tts-smoke-")
 os.environ["STORAGE_DIR"] = _TMP
 os.environ["CHECK_REMOTE_ON_START"] = "false"      # 冒煙測試不連任何遠端
@@ -61,16 +110,38 @@ for _n in ("tts.bench", "tts.engine", "tts.api", "tts.voicesync", "tts.batch",
 from app import config  # noqa: E402
 
 FAILS: list[str] = []
+RESULTS: list[dict] = []      # 逐項結果，--json / --junit / --repeat 統計都吃這份
+_SECTION = ""
+_SECTION_SHOWN = False
+
+
+def _show_section() -> None:
+    """把段落標題印出來（安靜模式下延到該段第一個失敗才印）。"""
+    global _SECTION_SHOWN
+    if not _SECTION_SHOWN and _SECTION:
+        print(f"\n{_c('1', _SECTION)}")
+        _SECTION_SHOWN = True
 
 
 def check(name: str, cond: bool, extra: str = "") -> None:
-    print(("  ✅ " if cond else "  ❌ ") + name + (f"  → {extra}" if extra and not cond else ""))
+    cond = bool(cond)
+    RESULTS.append({"section": _SECTION, "name": name, "ok": cond,
+                    "extra": "" if cond else str(extra)[:400]})
     if not cond:
         FAILS.append(name)
+    if cond and ARGS.quiet:
+        return
+    _show_section()
+    line = ("  ✅ " if cond else "  ❌ ") + name + (f"  → {extra}" if extra and not cond else "")
+    print(line if cond else _c("31", line))
 
 
 def section(title: str) -> None:
-    print(f"\n\033[1m{title}\033[0m")
+    global _SECTION, _SECTION_SHOWN
+    _SECTION = title
+    _SECTION_SHOWN = False
+    if not ARGS.quiet:
+        _show_section()
 
 
 def _tone(seconds: float, sr: int, hz: float) -> np.ndarray:
@@ -104,14 +175,14 @@ from app.engines.gateway import GatewayAdapter  # noqa: E402
 FAKE = {
     "cosyvoice2":     (11000.0, 1.2, 24000, 0.010),
     "fun-cosyvoice3": (10500.0, 1.1, 24000, 0.014),
-    "qwen3-tts":      (7200.0, 1.0, 16000, 0.006),
+    "qwen3-tts":      (10800.0, 1.0, 24000, 0.006),
     "voxcpm2":        (4000.0, 1.3, 48000, 0.020),
 }
 
 CAPS = {
     "cosyvoice2":     {"modes": ["clone"], "presets": [], "sample_rate": 24000},
     "fun-cosyvoice3": {"modes": ["clone"], "presets": [], "sample_rate": 24000},
-    "qwen3-tts":      {"modes": ["preset"], "presets": ["Vivian", "Ethan"], "sample_rate": 16000},
+    "qwen3-tts":      {"modes": ["clone"], "presets": [], "sample_rate": 24000},
     "voxcpm2":        {"modes": ["clone", "design", "default"], "presets": [], "sample_rate": 48000},
 }
 
@@ -210,13 +281,13 @@ def main() -> int:
     keys = [e["key"] for e in st["engines"]]
     check("四顆 gateway 都登錄了", all(k in keys for k in FAKE), keys)
     check("能力從 /v1/models 探測（不是寫死）",
-          st["clone_capable"] == ["cosyvoice2", "fun-cosyvoice3", "voxcpm2"],
+          st["clone_capable"] == ["cosyvoice2", "fun-cosyvoice3", "qwen3-tts", "voxcpm2"],
           st["clone_capable"])
-    check("qwen3-tts 被正確識別為 preset-only",
-          "qwen3-tts" not in st["clone_capable"])
     qwen = next(e for e in st["engines"] if e["key"] == "qwen3-tts")
-    check("preset 引擎不強制挑音色", qwen["needs_voice"] is False)
-    check("preset 清單探測得到", qwen["presets"] == ["Vivian", "Ethan"], qwen["presets"])
+    check("qwen3-tts 被識別為 clone-only（Base checkpoint）",
+          qwen["modes"] == ["clone"] and qwen["presets"] == [],
+          {"modes": qwen["modes"], "presets": qwen["presets"]})
+    check("clone-only 引擎強制先挑音色", qwen["needs_voice"] is True)
     vox = next(e for e in st["engines"] if e["key"] == "voxcpm2")
     check("voxcpm2 宣稱 48kHz", vox["sample_rate"] == 48000)
 
@@ -235,13 +306,14 @@ def main() -> int:
     job = wait_job(client, res.json()["job_id"])
     check("推送任務完成", job["status"] == "done", str(job.get("error"))[:200])
     pushed = {r["engine"] for r in (job["result"] or {}).get("results", [])}
-    check("只推給能克隆的三顆", pushed == {"cosyvoice2", "fun-cosyvoice3", "voxcpm2"}, pushed)
+    check("推給所有能克隆的引擎",
+          pushed == {"cosyvoice2", "fun-cosyvoice3", "qwen3-tts", "voxcpm2"}, pushed)
 
     sync = client.get(f"/api/voices/{voice_id}/sync").json()["sync"]
-    check("三顆狀態是 synced",
-          all(sync[k]["state"] == "synced" for k in ["cosyvoice2", "fun-cosyvoice3", "voxcpm2"]))
-    check("qwen3-tts 標成 unsupported 而不是失敗",
-          sync["qwen3-tts"]["state"] == "unsupported", sync["qwen3-tts"])
+    check("四顆狀態都是 synced",
+          all(sync[k]["state"] == "synced"
+              for k in ["cosyvoice2", "fun-cosyvoice3", "qwen3-tts", "voxcpm2"]),
+          {k: v["state"] for k, v in sync.items()})
 
     # 改逐字稿之後，遠端那份就過期了 —— 這個偵測壞掉會安靜地拿舊參考音去比
     client.patch(f"/api/voices/{voice_id}", json={"transcription": "改過的逐字稿內容不一樣了"})
@@ -491,11 +563,11 @@ def main() -> int:
 
     print()
     if FAILS:
-        print(f"\033[31m{len(FAILS)} 項失敗：\033[0m")
+        print(_c("31", f"{len(FAILS)} 項失敗（共 {len(RESULTS)} 項）："))
         for f in FAILS:
             print("  ·", f)
         return 1
-    print("\033[32m全部通過\033[0m")
+    print(_c("32", f"全部通過（{len(RESULTS)} 項）"))
     return 0
 
 
@@ -595,7 +667,222 @@ def check_remote_call() -> None:
     server.shutdown()
 
 
+# ============================================================ 自動化：報告輸出
+def _write_json(path: str, payload: dict) -> None:
+    text = json.dumps(payload, ensure_ascii=False, indent=2)
+    if path == "-":
+        print(text)
+        return
+    Path(path).write_text(text + "\n", encoding="utf-8")
+
+
+def _write_junit(path: str, suite_name: str, cases: list[dict], elapsed: float) -> None:
+    """JUnit XML —— GitHub Actions / Jenkins / GitLab 都讀得懂這個格式。
+
+    每個 section 變成一個 testsuite，每個 check 變成一個 testcase，
+    失敗訊息帶上 check 印在終端機的那段 extra（不然在 CI 上只會看到一個名字）。
+    """
+    from xml.sax.saxutils import escape, quoteattr
+
+    by_section: dict[str, list[dict]] = {}
+    for c in cases:
+        by_section.setdefault(c["section"] or "（其他）", []).append(c)
+
+    def counts(items: list[dict]) -> tuple[int, int]:
+        return (sum(1 for c in items if not c["ok"] and not c.get("skipped")),
+                sum(1 for c in items if c.get("skipped")))
+
+    fails, skips = counts(cases)
+    out = ['<?xml version="1.0" encoding="utf-8"?>',
+           f'<testsuites name={quoteattr(suite_name)} tests="{len(cases)}" '
+           f'failures="{fails}" skipped="{skips}" time="{elapsed:.3f}">']
+    for sec, items in by_section.items():
+        f, s = counts(items)
+        out.append(f'  <testsuite name={quoteattr(sec)} tests="{len(items)}" '
+                   f'failures="{f}" skipped="{s}">')
+        for c in items:
+            msg = c.get("message") or ""
+            out.append(f'    <testcase classname={quoteattr(sec)} name={quoteattr(c["name"])}>')
+            if c.get("skipped"):
+                out.append(f'      <skipped message={quoteattr(msg or "沒跑到")}/>')
+            elif not c["ok"]:
+                out.append(f'      <failure message={quoteattr(msg or "失敗")}>'
+                           f'{escape(msg)}</failure>')
+            out.append('    </testcase>')
+        out.append('  </testsuite>')
+    out.append('</testsuites>')
+    Path(path).write_text("\n".join(out) + "\n", encoding="utf-8")
+
+
+# ============================================================ 自動化：跑一次
+def run_once() -> int:
+    """跑完整條流程，寫出報告，回傳 exit code。
+
+    中途爆掉也要留下報告 —— CI 上只看得到 exit code 的話，
+    「第 7 段就掛了」和「最後一項沒過」會長得一模一樣。
+    """
+    crash = None
+    try:
+        code = main()
+    except Exception as exc:  # noqa: BLE001
+        crash = traceback.format_exc()
+        name = f"測試中途爆掉：{type(exc).__name__}"
+        RESULTS.append({"section": _SECTION or "（啟動）", "name": name,
+                        "ok": False, "extra": str(exc)[:400]})
+        FAILS.append(name)
+        code = 2
+        print("\n" + crash, file=sys.stderr)
+
+    elapsed = round(time.time() - _T0, 3)
+    report = {
+        "mode": "single",
+        "ok": not FAILS,
+        "exit_code": code,
+        "crashed": crash is not None,
+        "total": len(RESULTS),
+        "passed": len(RESULTS) - len(FAILS),
+        "failed": len(FAILS),
+        "elapsed_seconds": elapsed,
+        "tmp_dir": _TMP,
+        "traceback": crash,
+        "checks": RESULTS,
+    }
+    if ARGS.json:
+        _write_json(ARGS.json, report)
+    if ARGS.junit:
+        _write_junit(ARGS.junit, "smoke_test", [
+            {"section": r["section"], "name": r["name"], "ok": r["ok"],
+             "message": r["extra"]} for r in RESULTS], elapsed)
+
+    # 失敗時把暫存資料夾留著（裡面有產生的音檔與 trials.json，是唯一的現場）
+    if code == 0 and not ARGS.keep_tmp:
+        shutil.rmtree(_TMP, ignore_errors=True)
+    else:
+        print(f"\n暫存資料夾：{_TMP}")
+    return code
+
+
+# ======================================================== 自動化：連跑找不穩定
+def _run_child(work: Path, i: int) -> dict:
+    out = work / f"run-{i:03d}.json"
+    cmd = [sys.executable, str(Path(__file__).resolve()),
+           "--quiet", "--no-color", "--json", str(out)]
+    if ARGS.keep_tmp:
+        cmd.append("--keep-tmp")
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if out.exists():
+        rep = json.loads(out.read_text(encoding="utf-8"))
+    else:
+        # 連 JSON 都沒寫出來 —— 通常是 import 就掛了，或被 OOM kill
+        rep = {"ok": False, "crashed": True, "checks": [], "failed": 0,
+               "exit_code": proc.returncode, "tmp_dir": None,
+               "traceback": (proc.stderr or proc.stdout or "")[-4000:]}
+    rep["run"] = i
+    rep["stdout"] = proc.stdout[-4000:]
+    return rep
+
+
+def run_repeat(times: int, jobs: int) -> int:
+    import concurrent.futures
+
+    shutil.rmtree(_TMP, ignore_errors=True)      # 母行程自己不跑測試，不留垃圾
+    work = Path(tempfile.mkdtemp(prefix="tts-smoke-repeat-"))
+    jobs = max(1, min(jobs, times))
+    print(f"連跑 {times} 次（同時 {jobs} 個）…")
+
+    runs: list[dict] = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
+        for rep in pool.map(lambda i: _run_child(work, i), range(1, times + 1)):
+            runs.append(rep)
+            mark = "✅" if rep["ok"] else ("💥" if rep.get("crashed") else "❌")
+            print(f"  {mark} 第 {rep['run']:>3} 次"
+                  + ("" if rep["ok"] else f"　失敗 {rep.get('failed', 0)} 項"))
+    runs.sort(key=lambda r: r["run"])
+
+    # 逐項統計：分母是「這一項真的跑到了幾次」（中途爆掉的話後面的項目根本沒跑）
+    order: list[tuple[str, str]] = []
+    tally: dict[tuple[str, str], dict] = {}
+    for rep in runs:
+        for c in rep.get("checks") or []:
+            key = (c["section"], c["name"])
+            if key not in tally:
+                tally[key] = {"attempts": 0, "failures": 0, "last_extra": ""}
+                order.append(key)
+            t = tally[key]
+            t["attempts"] += 1
+            if not c["ok"]:
+                t["failures"] += 1
+                t["last_extra"] = c.get("extra") or ""
+
+    flaky = [k for k in order if 0 < tally[k]["failures"] < tally[k]["attempts"]]
+    always = [k for k in order if tally[k]["failures"] == tally[k]["attempts"] > 0]
+    partial = [k for k in order if tally[k]["attempts"] < times]
+    ok_runs = sum(1 for r in runs if r["ok"])
+    elapsed = round(time.time() - _T0, 3)
+
+    print()
+    print(f"{times} 次裡 {ok_runs} 次全過、{times - ok_runs} 次有失敗"
+          f"（總耗時 {elapsed:.1f} 秒）")
+
+    def line(key: tuple[str, str], icon: str) -> None:
+        t = tally[key]
+        print(f"  {icon} {key[1]}")
+        print(f"       {key[0]}　失敗 {t['failures']}/{t['attempts']} 次"
+              f"（{t['failures'] / t['attempts']:.0%}）"
+              + (f"　最後訊息：{t['last_extra'][:120]}" if t["last_extra"] else ""))
+
+    if flaky:
+        print(_c("33", f"\n不穩定 —— 時好時壞的 {len(flaky)} 項（這才是要修的）："))
+        for k in flaky:
+            line(k, "⚠")
+    if always:
+        print(_c("31", f"\n每次都失敗的 {len(always)} 項："))
+        for k in always:
+            line(k, "❌")
+    if partial:
+        print(_c("33", f"\n有 {len(partial)} 項不是每次都跑到（有幾次中途就掛了）"))
+    crashed = [r for r in runs if r.get("crashed")]
+    if crashed:
+        print(_c("31", f"\n{len(crashed)} 次中途爆掉：")
+              + "".join(f"\n  · 第 {r['run']} 次　{(r.get('traceback') or '').strip().splitlines()[-1][:160]}"
+                        for r in crashed))
+    if not flaky and not always and not crashed:
+        print(_c("32", "沒有不穩定的項目"))
+
+    checks = [{"section": k[0], "name": k[1], **tally[k],
+               "ok": tally[k]["failures"] == 0} for k in order]
+    payload = {
+        "mode": "repeat",
+        "ok": ok_runs == times,
+        "runs": times, "jobs": jobs,
+        "ok_runs": ok_runs, "failed_runs": times - ok_runs,
+        "elapsed_seconds": elapsed,
+        "flaky": [{"section": k[0], "name": k[1], **tally[k]} for k in flaky],
+        "always_failing": [{"section": k[0], "name": k[1], **tally[k]} for k in always],
+        "checks": checks,
+        "run_reports": [{k: v for k, v in r.items() if k != "checks"} for r in runs],
+    }
+    if ARGS.json:
+        _write_json(ARGS.json, payload)
+    if ARGS.junit:
+        # 一次都沒失敗、但有幾次沒跑到（前面就爆掉了）的算 skipped —— 報成失敗
+        # 會讓 CI 上滿江紅，真正的原因（那次爆炸）反而被埋掉
+        _write_junit(ARGS.junit, f"smoke_test x{times}", [
+            {"section": c["section"], "name": c["name"],
+             "ok": c["failures"] == 0,
+             "skipped": c["failures"] == 0 and c["attempts"] < times,
+             "message": (f"{times} 次裡失敗 {c['failures']} 次"
+                         + (f"（另有 {times - c['attempts']} 次沒跑到）"
+                            if c["attempts"] < times else "")
+                         + (f"：{c['last_extra']}" if c["last_extra"] else ""))
+             if (c["failures"] or c["attempts"] < times) else ""}
+            for c in checks], elapsed)
+
+    print(f"\n各次結果：{work}")
+    return 0 if ok_runs == times else 1
+
+
 if __name__ == "__main__":
-    code = main()
-    print(f"\n暫存資料夾：{_TMP}")
-    sys.exit(code)
+    if ARGS.repeat > 1:
+        sys.exit(run_repeat(ARGS.repeat, ARGS.jobs))
+    sys.exit(run_once())

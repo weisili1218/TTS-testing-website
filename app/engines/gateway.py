@@ -20,7 +20,7 @@ qwen3-tts 換成會克隆的 Base checkpoint，這裡一行都不用改，探測
 音色怎麼決定（`_pick_voice`）
 -----------------------------
 1. 支援 clone、而且這個本機音色已經推送過去了 -> 用遠端 voice id（**音色可比**）
-2. 支援 preset -> 用設定的 speaker（例如 Vivian）（音色不可比）
+2. 支援 preset -> 用設定的 speaker（`preset_voice`）（音色不可比）
 3. 支援 default -> 不帶 voice，讓模型自己生（音色不可比）
 4. 都不行 -> 報錯，訊息告訴使用者要先推送音色
 
@@ -201,6 +201,36 @@ class GatewayAdapter(TTSAdapter):
             )
         raise ValueError(f"{self.label} 沒有宣告任何可用的 mode（/v1/models 回的 modes 是空的）")
 
+    # ------------------------------------------------------------ 必填欄位
+    def _required_fields(self) -> set[str]:
+        """這顆引擎的 API 規定不能省略的欄位（見 config 的 required_fields）。"""
+        return set(self.spec.get("required_fields") or [])
+
+    def _resolve_language(self, opts: dict) -> str:
+        """語言：引擎設定優先，其次沿用音色上填的語言。"""
+        return str(self.spec.get("language") or opts.get("voice_language") or "").strip()
+
+    def _check_required(self, voice_value: Optional[str], language: str) -> None:
+        """必填欄位少了就在本機擋下來，附上要去哪裡補。
+
+        等遠端回錯誤才知道的話，訊息只會是一句 validation error，看不出要填哪裡；
+        批次跑到一半才炸掉更難救。
+        """
+        required = self._required_fields()
+        missing: list[str] = []
+        if "voice" in required and not str(voice_value or "").strip():
+            missing.append("voice（clone 引擎請先到「音色」分頁推送；"
+                           "preset 引擎請設定 preset_voice）")
+        if "language" in required and not language:
+            missing.append("language（語言名稱，例如 Chinese）")
+        if not missing:
+            return
+        raise ValueError(
+            f"{self.label} 的 API 規定 " + "、".join(sorted(required))
+            + " 都必填，目前缺少：" + "；".join(missing)
+            + f"。請在 engines.json 的 {self.key} 補上對應欄位。"
+        )
+
     @property
     def needs_voice(self) -> bool:  # type: ignore[override]
         """要不要強制先挑一個本機音色。
@@ -244,6 +274,8 @@ class GatewayAdapter(TTSAdapter):
                 f"{self.label} 要用內建 speaker，但清單是空的。"
                 "先按「暖機」把模型載進 GPU（preset 清單是載入時才填的）。"
             )
+        # 必填欄位在這裡就擋掉，不要等批次跑到一半才炸
+        self._check_required(voice_value, self._resolve_language(opts))
 
     def describe(self) -> dict:
         caps = self.capabilities()
@@ -266,6 +298,7 @@ class GatewayAdapter(TTSAdapter):
             "speed_mode": self.spec.get("speed_mode"),
             "honors_speed": self.remote_speed,
             "language": self.spec.get("language") or "",
+            "required_fields": sorted(self._required_fields()),
             "notes": self.spec.get("notes") or "",
             "caps_error": caps.get("error"),
         }
@@ -382,7 +415,8 @@ class GatewayAdapter(TTSAdapter):
         if self.remote_speed:
             payload["speed"] = round(float(opts.get("speed", 1.0)), 3)
 
-        language = str(self.spec.get("language") or opts.get("voice_language") or "").strip()
+        language = self._resolve_language(opts)
+        self._check_required(voice_value, language)
         if language:
             payload["language"] = language
 

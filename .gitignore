@@ -16,3 +16,7 @@ storage/
 
 # 本機備份檔
 *.bak
+
+# 測試報告（CI 產物）
+smoke-report.*
+smoke-flaky.*

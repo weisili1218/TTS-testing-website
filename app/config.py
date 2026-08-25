@@ -88,10 +88,15 @@ GATEWAY_DEFAULTS: dict[str, Any] = {
     # 預設 local：寧可自己做，也不要「調了沒反應」造成引擎之間語速不一致。
     "speed_mode": "local",
 
-    # preset-only 引擎（qwen3-tts）要用哪個內建 speaker
+    # 宣告 preset mode 的引擎要用哪個內建 speaker（四包目前都沒有 preset）
     "preset_voice": "",
-    # 只有 qwen3-tts 會用；留空則沿用音色上的設定
+    # 語言名稱（例如 Chinese）。留空則沿用音色上填的設定
     "language": "",
+
+    # 這顆引擎的 API 規定哪些欄位「一定要有值」。空的就不送是 OpenAI 的慣例，
+    # 但不是每顆都這麼寬鬆 —— 列在這裡的欄位會在 validate() 就先擋下來，
+    # 不會等送出去才收到一句看不出要補哪裡的遠端 validation error。
+    "required_fields": [],
 
     # instructions（語氣指示）預設不送 —— CosyVoice 收到就會離開 zero-shot
     # 路徑改走 inference_instruct2，音色相似度會跟不給時不一樣，等於偷換受測條件。
@@ -119,7 +124,8 @@ KNOWN_ENGINE_HINTS: dict[str, dict] = {
     "cosyvoice2":     {"label": "CosyVoice2",    "speed_mode": "remote"},
     "fun-cosyvoice3": {"label": "FunCosyVoice3", "speed_mode": "remote"},
     "qwen3-tts":      {"label": "Qwen3-TTS",     "speed_mode": "local",
-                       "preset_voice": "Vivian", "language": "zh"},
+                       "language": "Chinese",
+                       "required_fields": ["language"]},
     "voxcpm2":        {"label": "VoxCPM2",       "speed_mode": "local"},
 }
 
@@ -155,6 +161,10 @@ def _normalize_spec(raw: dict) -> dict | None:
         spec["speed_mode"] = "local"
     if not isinstance(spec.get("extra_fields"), dict):
         spec["extra_fields"] = {}
+    req = spec.get("required_fields")
+    if isinstance(req, str):
+        req = [req]
+    spec["required_fields"] = [str(f).strip() for f in (req or []) if str(f).strip()]
     return spec
 
 
