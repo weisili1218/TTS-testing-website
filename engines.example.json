@@ -21,9 +21,8 @@
     "base_url": "http://${TTS_HOST}:18003",
     "model": "qwen3-tts",
     "speed_mode": "local",
-    "preset_voice": "Vivian",
-    "language": "zh",
-    "notes": "只有 preset，不能克隆 -> 音色維度與另外三顆不可比"
+    "language": "Chinese",
+    "notes": "Base checkpoint：clone-only，沒有內建 speaker -> 音色可比，但一定要先推送音色"
   },
   {
     "key": "voxcpm2",

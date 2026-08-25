@@ -16,7 +16,7 @@ voxcpm2）用的是同一份 OpenAI 相容 API，所以不需要四個轉接器 
 ```
                      ┌──────────────┐  :18001  cosyvoice2   clone
                      │              │  :18002  fun-cosyvoice3 clone
-   ┌──────────┐      │   四包       │  :18003  qwen3-tts    preset
+   ┌──────────┐      │   四包       │  :18003  qwen3-tts    clone
    │  評測平台  │ ───▶ │   gateway   │  :18004  voxcpm2      clone/design/default
    │ (這個專案) │      │ OpenAI 相容  │
    └──────────┘      └──────────────┘
@@ -65,7 +65,7 @@ cp .env.example .env
 | 包 | port | 支援的 mode | 音色可比？ | `speed` 有效？ | 這輪 |
 |---|---|---|---|---|---|
 | fun-cosyvoice3 | 18002 | `clone` | ✅ | ✅ | ✅ 測 |
-| qwen3-tts | 18003 | `preset` | ❌ 只有內建 speaker | ❌ 會忽略 | ✅ 測 |
+| qwen3-tts | 18003 | `clone` | ✅ | ❌ 會忽略 | ✅ 測 |
 | cosyvoice2 | 18001 | `clone` | ✅ | ✅ | ⏸ `enabled: false` |
 | voxcpm2 | 18004 | `clone` / `design` / `default` | ✅ | ❌ 會忽略 | ⏸ `enabled: false` |
 
@@ -75,12 +75,15 @@ cp .env.example .env
 
 平台**不寫死**上面這張表。`modes` / `presets` / `sample_rate` / `loaded`
 全部是從各 gateway 的 `GET /v1/models` 探測來的 —— gateway 自己就是這樣設計的
-（`ENGINE_MODES` 環境變數決定路由）。所以之後把 qwen3-tts 換成會克隆的
-Base checkpoint、把 `ENGINE_MODES` 改成 `preset,clone`，平台這邊一行都不用改，
-探測到 `clone` 就會自動改用音色庫的參考音，音色維度也會自動變成可比。
+（`ENGINE_MODES` 環境變數決定路由）。qwen3-tts 從 CustomVoice 換成 Base
+checkpoint（`ENGINE_MODES=clone`）時就驗證過這件事：平台這邊一行都不用改，
+探測到 `clone` 就自動改用音色庫的參考音，音色維度也自動變成可比。
+
+注意 Base checkpoint **沒有**內建 speaker（Vivian / Ethan 那組是 CustomVoice
+專屬）。所以 qwen3-tts 一定要先推送音色，音色庫是空的時候合成一律 400。
 
 `engines.json` 裡只放 API 探測不到的東西：顯示名稱、`speed` 有沒有效、
-preset 要用哪個 speaker。
+語言、preset 要用哪個 speaker。
 
 ### 音色為什麼要「推送」
 
@@ -99,8 +102,6 @@ storage/voices/<id>/prompt.wav
 對照表在 `storage/voice_map.json`，記了參考音與逐字稿的雜湊。
 **改了逐字稿或換了參考音，遠端那份會被判定成 `stale`，而且不會被拿來評測** ——
 拿舊的參考音去比新的，比出來的東西沒有意義。下次評測前會自動重推。
-
-qwen3-tts 會被標成 `unsupported`（不是失敗）：它本來就沒有這個能力。
 
 ### 幾個會偷換受測條件的坑，平台的處理方式
 
@@ -237,12 +238,20 @@ peak / RMS / 削波全部會失去比較意義。
   "base_url": "http://${TTS_HOST}:18005",
   "speed_mode": "local",
   "preset_voice": "",
+  "language": "",
+  "required_fields": [],
   "notes": "備註會顯示在引擎分頁上"
 }
 ```
 
 存進 `engines.json`，按 UI 上的「重載 engines.json」就生效，不用重啟。
 能力會自己從 `/v1/models` 探測。
+
+`required_fields` 是給「欄位不能省略」的 API 用的。多數 OpenAI 相容端點空欄位不送
+就好；列在這裡的欄位會在送出前先檢查，訊息直接告訴你要補哪一個，而不是等遠端
+回一句看不出要填哪裡的 validation error。`qwen3-tts` 這個 key 已經內建
+`["language"]`（它的 `language` 不指定會退到 `Auto`，克隆路徑的品質比較不穩），
+不用自己寫。
 
 **介面完全不一樣的話**，在 `app/engines/` 開一個檔案：
 
@@ -297,7 +306,9 @@ storage/
   outputs/        評測產生的音檔
   trials.json     評測紀錄（含投票結果）
   reports/        批次報表
-scripts/smoke_test.py   不需要任何遠端服務的完整流程測試
+scripts/smoke_test.py   不需要任何遠端服務的完整流程測試（--repeat 可連跑找不穩定）
+Makefile                make test / test-ci / test-flaky
+.github/workflows/smoke.yml   CI：每次 PR 跑一次，每天掃一次 flaky
 ```
 
 ---
@@ -345,9 +356,9 @@ curl -s localhost:8080/api/jobs/$JOB | python3 -m json.tool
 模型還沒載進 GPU（`/v1/models` 的 `loaded: false`）。按「全部暖機」，
 冷啟動要 30–90 秒。這是刻意分開的：載模型的時間不該算進合成耗時。
 
-**preset 清單是空的（qwen3-tts 選不到 speaker）**
-引擎的內建 speaker 清單是**模型載入時才填的**，而 gateway 對引擎能力有
-300 秒快取，冷啟動後太早打會看到空清單、而且會空五分鐘。
+**能力探測看到的是冷啟動時的舊狀態**
+`modes` / `presets` / `loaded` 是**模型載入時才填的**，而 gateway 對引擎能力有
+300 秒快取，冷啟動後太早打會看到「還沒 ready」、而且會被快取住五分鐘。
 按「暖機」，它會順手清掉那層快取。
 
 **一直回 503**
@@ -356,7 +367,7 @@ gateway 連不到引擎，通常還在載模型。平台會自動重試（3 / 8 
 
 **音色標成「推送不足兩顆，音色不可比」**
 克隆比較至少要有兩顆引擎拿到同一段參考音。到「音色」按「推送到各引擎」，
-看每顆的狀態標籤。qwen3-tts 標 `unsupported` 是正常的 —— 它只有內建 speaker。
+看每顆的狀態標籤。四包現在都吃克隆，沒有 `unsupported` 是正常的。
 
 **音色標成「已過期」**
 本機的參考音或逐字稿改過，遠端那份是舊的。平台會**拒絕拿它去評測**
@@ -385,13 +396,48 @@ gateway 連不到引擎，通常還在載模型。平台會自動重試（3 / 8 
 ## 十一、開發
 
 ```bash
-python scripts/smoke_test.py      # 不需要任何遠端服務，跑完整條評測流程
+make test                    # 跑一次完整流程測試（等同 python scripts/smoke_test.py）
+make test-ci                 # 只印失敗，另外產出 JUnit XML 與 JSON 報告
+make test-flaky N=50 J=4     # 連跑 50 次（同時 4 個），抓時好時壞的項目
 ```
 
 會把每個轉接器的 HTTP 呼叫與 ASR 換成假的，驗證：四方評測、盲測遮蔽
 （引擎名稱／秒數／參賽名單）、排名拆成成對結果、Elo 排序、對決配對覆蓋、
 音色推送的過期偵測、升採樣偵測、重複跑的輪替順序、批次報表、CSV 匯出、路徑安全。
 最後再用一個真的 HTTP stub 檢查 gateway 轉接器送出去的 payload。
+**完全不連遠端，所以 CI 上不需要 GPU、不需要 `.env`、也不需要 `engines.json`。**
+
+### 自動化模式
+
+```
+--quiet            只印失敗的項目與總結（通過的不刷版面）
+--json 檔案        逐項結果寫成 JSON（填 - 印到 stdout）
+--junit 檔案       JUnit XML，GitHub Actions / GitLab / Jenkins 都讀得懂
+--repeat N         連跑 N 次，統計逐項成功率
+--jobs N           --repeat 時同時跑幾個
+--no-color         不要 ANSI 色碼（偵測到 CI 環境變數時自動關）
+--keep-tmp         通過時也保留暫存資料夾（預設只在失敗時留著）
+```
+
+全部通過回傳 0，有任何一項失敗或中途爆掉回傳非 0。
+
+`--repeat` 是拿來找**不穩定的測試**的：每次都開獨立子行程（同行程重跑沒有意義 ——
+暫存資料夾、被換掉的假物件、config 讀進來的設定都已經被上一次污染了），
+跑完把項目分成三類：
+
+- **不穩定** —— 20 次裡失敗 2 次，這種才是要修的，跑一次看不出來
+- **每次都失敗** —— 真的壞了
+- **沒跑完** —— 有幾次在它之前就爆掉了（分母會標出來）
+
+這條流程對時序特別敏感：評測佇列是單執行緒的、`elapsed_spread` 在量耗時分佈、
+對決配對靠交手次數挑組合，任何一個地方混進非決定性都會變成偶爾失敗的測試。
+
+### CI
+
+`.github/workflows/smoke.yml`：
+
+- push 到 main 與每個 PR → 跑一次，報告存成 artifact
+- 每天 02:00（台北）與手動觸發 → 連跑 20 次掃 flaky
 
 ---
 

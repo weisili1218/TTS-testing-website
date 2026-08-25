@@ -9,9 +9,10 @@
 所以本機音色庫是唯一的真實來源，這裡負責：
 
     storage/voices/<local_id>/prompt.wav
-        ├─ POST http://host:8001/v1/voices  ->  voice_a1b2...   (cosyvoice2)
-        ├─ POST http://host:8002/v1/voices  ->  voice_c3d4...   (fun-cosyvoice3)
-        └─ POST http://host:8004/v1/voices  ->  voice_e5f6...   (voxcpm2)
+        ├─ POST http://host:18001/v1/voices  ->  voice_a1b2...  (cosyvoice2)
+        ├─ POST http://host:18002/v1/voices  ->  voice_c3d4...  (fun-cosyvoice3)
+        ├─ POST http://host:18003/v1/voices  ->  voice_e5f6...  (qwen3-tts)
+        └─ POST http://host:18004/v1/voices  ->  voice_7a8b...  (voxcpm2)
 
 對照表存在 `storage/voice_map.json`：
 
@@ -20,8 +21,9 @@
 `wav_sha` 與 `transcript_sha` 是用來偵測「本機改過了，遠端是舊的」。參考音重傳
 或逐字稿改了，狀態就會變成 stale，下次評測前會自動重推（AUTO_PUSH_VOICE）。
 
-不能克隆的引擎（qwen3-tts 只有 preset）會被標成 unsupported —— 不是錯誤，
-是這顆引擎本來就沒有這個能力，UI 要據此把它排除在音色比較之外。
+不能克隆的引擎（`/v1/models` 的 modes 沒有 clone）會被標成 unsupported —— 不是
+錯誤，是這顆引擎本來就沒有這個能力，UI 要據此把它排除在音色比較之外。
+四包目前都支援 clone，所以正常情況下不會看到這個狀態。
 """
 
 from __future__ import annotations

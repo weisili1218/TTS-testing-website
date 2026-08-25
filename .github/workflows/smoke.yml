@@ -1,0 +1,61 @@
+name: smoke
+
+# 這條流程完全不碰任何 TTS 引擎或 ASR 服務 —— smoke_test.py 會把它們換成假的，
+# 所以 CI 上不需要 GPU、不需要 .env、也不需要 engines.json。
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      repeat:
+        description: 連跑幾次找不穩定的項目
+        default: "20"
+  schedule:
+    - cron: "0 18 * * *"      # 每天掃一次 flaky（UTC 18:00 = 台北 02:00）
+
+jobs:
+  smoke:
+    name: 完整流程測試
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-console.txt
+      - run: pip install -r requirements-console.txt
+      - name: 跑一次
+        run: python scripts/smoke_test.py --quiet --no-color --junit smoke-report.xml --json smoke-report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-report
+          path: smoke-report.*
+
+  flaky:
+    name: 連跑找不穩定
+    # 每次 push 都連跑 20 次太浪費，排程與手動觸發時才跑
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-console.txt
+      - run: pip install -r requirements-console.txt
+      - name: 連跑
+        run: |
+          python scripts/smoke_test.py \
+            --repeat "${{ github.event.inputs.repeat || 20 }}" --jobs 2 \
+            --no-color --junit smoke-flaky.xml --json smoke-flaky.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-flaky
+          path: smoke-flaky.*
