@@ -2,6 +2,10 @@ name: smoke
 
 # 這條流程完全不碰任何 TTS 引擎或 ASR 服務 —— smoke_test.py 會把它們換成假的，
 # 所以 CI 上不需要 GPU、不需要 .env、也不需要 engines.json。
+#
+# 但**需要 ffmpeg**：audio_utils.load_mono() 讀音檔的順序是 librosa -> ffmpeg，
+# 而 librosa 刻意不放進 requirements（太重，平台只是要解個碼）。runner 預設沒裝
+# ffmpeg，兩條路都斷的話 smoke test 會停在「建立音色」，只跑到第 5 項就結束。
 on:
   push:
     branches: [main]
@@ -21,6 +25,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - name: 裝 ffmpeg（audio_utils 的解碼退路，runner 預設沒有）
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -43,6 +49,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - name: 裝 ffmpeg（audio_utils 的解碼退路，runner 預設沒有）
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
