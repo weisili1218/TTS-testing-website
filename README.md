@@ -43,6 +43,11 @@ cp .env.example .env
 ./run.sh
 ```
 
+> **另外需要 `ffmpeg`**（macOS：`brew install ffmpeg`；Ubuntu：`apt install ffmpeg`）。
+> `audio_utils.load_mono()` 讀音檔的順序是 librosa → ffmpeg，而 librosa 太重、
+> 刻意不放進 requirements，所以上傳參考音這條路實際上靠 ffmpeg。
+> 兩個都沒有的話，「建立音色」會直接失敗。
+
 啟動時會把展開後的位址全部印出來 —— 主機填錯是最常見的問題，
 所以讓它在第一行就看得見，而不是等第一次評測失敗才發現。
 
@@ -463,6 +468,9 @@ make test-flaky N=50 J=4     # 連跑 50 次（同時 4 個），抓時好時壞
 
 - push 到 main 與每個 PR → 跑一次，報告存成 artifact
 - 每天 02:00（台北）與手動觸發 → 連跑 20 次掃 flaky
+
+不連任何遠端服務，但 runner 上**要先裝 ffmpeg** —— 見上面「快速開始」的說明。
+沒裝的話 smoke test 會停在「建立音色」，只跑到第 5 項就結束（而且是紅的）。
 
 ---
 
