@@ -1,0 +1,7 @@
+# 只有 scripts/bench_report/ 需要的套件。
+# 刻意跟 requirements-console.txt 分開：平台本身跑不到這些，CI 也不用裝。
+#
+#     pip install -r requirements-bench.txt
+#
+# zhconv 做簡繁轉換，寬鬆 CER 要用（見 scripts/bench_report/lenient_cer.py）
+zhconv==1.4.3

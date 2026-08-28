@@ -189,6 +189,12 @@ Whisper 自己就會聽錯 —— 拿真人原始錄音去辨識也不會是 0�
 平台會自動比對：**兩個引擎的 CER 差距如果小於 ASR 誤差底線的 1/4，
 就會在「判讀提醒」裡說這個差距不足以下結論。**
 
+還有一件事平台**沒有**幫你處理：`normalize_for_cer()` 只去標點、空白與全半形，
+不做簡繁轉換、也不統一數字寫法。所以 CER 裡混了兩種與引擎品質無關的誤差 ——
+Whisper 有時吐簡體字（整段都算錯）、輸入寫「兩萬三千四百五十六」而 ASR 寫「23456」。
+這個雜訊對不同引擎的影響幅度不一樣，足以翻轉分類名次。要下結論之前，
+用 [`scripts/bench_report/`](scripts/bench_report/) 另外算一版**寬鬆 CER**，兩版一起看。
+
 ### 分類戰報
 
 「哪個模型最好」通常沒有單一答案，而是「數字誰強、破音字誰強」。
@@ -224,6 +230,19 @@ peak / RMS / 削波全部會失去比較意義。
 
 批次**依序**跑（不並行），理由跟單筆評測一樣：引擎共用同一台 GPU。
 十句 × 四個引擎會跑好幾分鐘。
+
+### 跑完之後：離線分析
+
+報表只有那一批的摘要。要做跨引擎、跨批次的比較（寬鬆 CER、成對顯著性檢定、
+把不同批次的同一句對起來），用 [`scripts/bench_report/`](scripts/bench_report/)：
+
+```bash
+make install-bench          # 只多一個 zhconv
+make bench-report ENGINES="fun-cosyvoice3=batch-A qwen3-tts=batch-B f5=batch-B"
+```
+
+引擎不是同一批跑的時候它會警告 —— 跨場次的速度比較混著系統性誤差，
+不能當成同場結果讀。
 
 ---
 
@@ -306,8 +325,14 @@ storage/
   outputs/        評測產生的音檔
   trials.json     評測紀錄（含投票結果）
   reports/        批次報表
-scripts/smoke_test.py   不需要任何遠端服務的完整流程測試（--repeat 可連跑找不穩定）
-Makefile                make test / test-ci / test-flaky
+scripts/
+  smoke_test.py         不需要任何遠端服務的完整流程測試（--repeat 可連跑找不穩定）
+  bench_report/         批次跑完之後的離線分析（不是平台的一部分，單向依賴 app）
+    lenient_cer.py      寬鬆 CER：把簡繁與數字書寫形式的雜訊扣掉
+    significance.py     成對 Wilcoxon／符號檢定／中位數信賴區間
+    build.py            把多顆引擎的逐句數據對齊，組成比較報告的資料檔
+requirements-bench.txt  離線分析要的套件（平台與 CI 都不需要）
+Makefile                make test / test-ci / test-flaky / bench-report
 .github/workflows/smoke.yml   CI：每次 PR 跑一次，每天掃一次 flaky
 ```
 
